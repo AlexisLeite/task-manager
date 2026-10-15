@@ -114,5 +114,3 @@ npx playwright show-report
 Playwright ejecuta Chromium real, levanta el servidor si es necesario y usa el portapapeles real con un solo worker para evitar interferencias del sistema. Cubre el documento original, referencias entre secciones, inclusión automática de todas las tareas, navegación, selección y movimiento de líneas, clipboard de texto y filas, TSV, drag, deshacer, reconciliación, sugerencias, identidad entre días, resumen mensual, persistencia, copias, migración, errores de almacenamiento, duración, prioridades y tema oscuro.
 
 Las pruebas de contrato verifican que un adaptador asíncrono conserve el orden de escritura, que se pueda guardar después de un error y que la sincronización preserve todas las tareas. El reporte HTML queda en `playwright-report/`; se retienen trazas de fallos y capturas de la pantalla clara, oscura y angosta en `test-results/`. La validación de esta versión cubre Chromium; no certifica otros motores.
-#   t a s k - m a n a g e r  
- 
