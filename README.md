@@ -38,13 +38,13 @@ Las rutas `/#/foco`, `/#/jornada` y `/#/mes` permiten navegación SPA sin recarg
 
 Un mismo sondeo cada segundo recalcula las actividades según la hora y consulta cambios de otros clientes con ETag (304 si no hay novedades). La actualización es silenciosa; se pospone mientras se edita un campo o hay cambios sin guardar. Al aceptar datos externos se limpia el historial de deshacer para evitar restaurar versiones antiguas. Las tareas nuevas se crean con prioridad baja.
 
-El menú contiene **Foco, Jornada e Historia**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
+El menú contiene **Foco, Jornada, Historia y Proyectos**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
 
 El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Realizado el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
 
 ## Reconciliación y mes
 
-**Realizado → Comenzar reconciliación desde el plan** copia las tareas y los bloques. Se edita con el mismo editor y conserva la planificación por separado. En realizado se puede modificar también el fin para registrar el tiempo efectivo. Quitar una tarea no realizada significa borrarla de las definiciones de realizado; no modifica las del plan.
+**Realizado** es una vista de consulta. Los registros se generan únicamente desde Foco al terminar o reprogramar una tarea. No permite ingresar, editar ni pegar trabajo realizado manualmente, ni copiar la planificación como realizado. Se conservan los registros históricos existentes.
 
 Al escribir una descripción, aparecen tareas conocidas que ya tienen tiempo registrado en realizado. Las sugerencias se eligen con flechas y Enter o con clic. Reutilizan una identidad estable entre jornadas; una coincidencia de nombre también la reutiliza.
 
@@ -72,7 +72,7 @@ El círculo de prioridad abre las opciones Baja, Media y Alta, tanto en Tareas p
 Las filas se pegan antes de la fila enfocada, o después si el cursor está al final de su último campo. **Home**, pegar: antes. **End**, pegar: después. No es necesario añadir una fila vacía. El pegado tabulado es compatible con spreadsheets:
 
 - Definiciones: `identificador\tduración\tprioridad\tdescripción`.
-- Plan: `referencias\tdescripción\tinicio\tfin`. En planificación el fin se recalcula a partir de las duraciones. En realizado se conserva el fin pegado.
+- Plan: `referencias\tdescripción\tinicio\tfin`. En planificación el fin se recalcula a partir de las duraciones. Realizado no admite pegado.
 
 El clipboard interno conserva identidades y referencias; si se copia un bloque a otra jornada, se incluyen las definiciones necesarias. El historial de deshacer mantiene hasta 150 cambios en la sesión; no se conserva al recargar. En macOS se admite Cmd en los atajos principales.
 
@@ -120,3 +120,10 @@ Las pruebas de backend usan bases SQLite temporales, nunca los datos del usuario
 Historia reúne todo el trabajo realizado, con filtros Desde/Hasta inclusivos, gráficas discretas por jornada y tarea, y acceso a cada jornada. Los intervalos paralelos cuentan una sola vez en el total; cada tarea conserva sus propias horas.
 
 El menú de cada tarea ofrece Ver definición, seguido de las acciones según su estado. Posponer permite elegir día y hora conservando la duración. Las tareas vencidas permanecen visibles con Completa y Reprogramar; esta última conserva las horas invertidas y permite elegir un nuevo horario. Los menús y modales tienen entrada y salida animada, respetando la preferencia de movimiento reducido.
+
+
+## Proyectos
+
+En Proyectos, escribir un nombre y presionar Enter permite agregarlo sin formularios adicionales. La columna Proyecto, al extremo derecho de Tareas para hoy, asigna una pertenencia opcional a cada tarea. La asignación se conserva al posponer, copiar y registrar trabajo desde Foco. Los registros realizados conservan el proyecto con el que se registraron; cambiar la planificación no reclasifica horas anteriores.
+
+En Historia, el botón Filtros contiene fechas y un selector de uno o varios proyectos, incluida la opción Sin proyecto. Sin selecciones se muestra todo. Totales, gráficas y listas usan el mismo filtro y cuentan una sola vez los intervalos paralelos. La lupa filtra únicamente los nombres de la lista de tareas por coincidencia aproximada.

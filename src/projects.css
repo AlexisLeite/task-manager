@@ -1,0 +1,227 @@
+.projects-view {
+  max-width: 720px;
+}
+#project-add {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin: 0 0 28px;
+}
+#project-name {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+#project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#project-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  font-size: 14px;
+}
+.project-title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.project-title,
+.project-title-editor {
+  animation: project-title-appear 180ms ease;
+}
+@keyframes project-title-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+#app .project-edit {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  width: 28px;
+  height: 28px;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity 180ms ease,
+    color 180ms ease;
+}
+#project-list li:hover .project-edit,
+#project-list li:focus-within .project-edit {
+  opacity: 1;
+}
+#project-list .project-edit[hidden] {
+  display: none;
+}
+#project-list .project-title-editor {
+  width: 100%;
+  min-width: 0;
+  padding: 4px;
+  font: inherit;
+}
+@media (hover: none) {
+  #app .project-edit {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app .project-edit {
+    transition: none;
+  }
+  .project-title,
+  .project-title-editor {
+    animation: none;
+  }
+}
+.project-col {
+  width: 170px;
+}
+[data-table="tasks"] select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 5px;
+}
+@media (max-width: 650px) {
+  .project-col {
+    width: 140px;
+  }
+}
+
+.history-project-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#history-project-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  min-width: 180px;
+  max-width: 260px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 4px;
+  font-size: 12px;
+}
+#history-project-selection {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#history-project-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  max-height: 260px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 6px 20px var(--shadow);
+  font-size: 12px;
+}
+#history-project-all {
+  width: 100%;
+  text-align: left;
+  padding: 9px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.history-project-options {
+  display: grid;
+}
+.history-project-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.history-project-options label:hover {
+  background: var(--hover);
+}
+.history-project-options input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+#history-project-popover .history-project-options label {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  text-align: left;
+}
+#history-project-popover .history-project-options input {
+  width: 14px;
+  min-width: 14px;
+  max-width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin: 0;
+  padding: 0;
+}
+#history-project-popover .history-project-options span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#app #history-project-popover {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 160ms,
+    transform 160ms,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+#app #history-project-popover:popover-open {
+  opacity: 1;
+  transform: none;
+}
+@starting-style {
+  #app #history-project-popover:popover-open {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app #history-project-popover {
+    transition: none;
+  }
+}
+
+[data-table="blocks"] .refs-col {
+  width: 90px;
+}
+#history-project-popover label:focus-within {
+  outline: none;
+}

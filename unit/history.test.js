@@ -15,6 +15,19 @@ const entry = (actual) => ({
   actual,
 });
 
+test('proyectos suman intervalos sin duplicar paralelos y respetan filtros y nombres actuales', () => {
+  const data = { projects: [{id:'p1',name:'Proyecto nuevo'}, {id:'p2',name:'Segundo'}], days: {
+    '2026-10-15': entry(doc([
+      {...task('a','a'),projectId:'p1'}, {...task('b','b'),projectId:'p1'}, {...task('c','c'),projectId:'p2'}, task('d','d')
+    ], [block(['a'],'09:00','11:00'),block(['b'],'10:00','12:00'),block(['c'],'10:00','11:00'),block(['d'],'12:00','12:30')]))
+  }};
+  assert.deepEqual(buildHistory(data).projects, [
+    {id:'p1',name:'Proyecto nuevo',minutes:180}, {id:'p2',name:'Segundo',minutes:60}, {id:'',name:'Sin proyecto',minutes:30}
+  ]);
+  assert.deepEqual(buildHistory(data,{projectIds:['p2']}).projects, [{id:'p2',name:'Segundo',minutes:60}]);
+  assert.deepEqual(buildHistory(data,{from:'2026-10-16'}).projects, []);
+});
+
 test("Historia incluye todas las fechas realizadas y nunca cuenta planificación", () => {
   const data = {
     tasks: [],
@@ -193,20 +206,15 @@ test("gráficas usan el mismo rango y minutos que el resumen, con fechas cronol�
   };
   const html = historyHtml(data, { from: "2026-10-01", to: "2026-10-02" });
   assert.ok(html.includes('id="history-actual">5:00 hs'));
-  assert.ok(html.includes('data-history-day="2026-10-01" data-minutes="120"'));
-  assert.ok(html.includes('data-history-day="2026-10-02" data-minutes="180"'));
+  assert.ok(html.includes('data-history-project-bar="" data-minutes="300"'));
   assert.ok(!html.includes("2026-09-30"));
-  assert.ok(
-    html.indexOf('data-history-day="2026-10-01"') <
-      html.indexOf('data-history-day="2026-10-02"'),
-  );
   assert.ok(html.includes('data-history-task-bar="same" data-minutes="300"'));
   assert.ok(
     html.includes('data-history-task-bar="parallel" data-minutes="120"'),
   );
   assert.ok(
     html.includes(
-      'aria-labelledby="history-daily-title history-daily-description"',
+      'aria-label="Distribución de horas realizadas por proyecto"',
     ),
   );
   assert.ok(

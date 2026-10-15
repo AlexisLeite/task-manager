@@ -203,8 +203,42 @@ table {
 .grip-col {
   width: 22px;
 }
+.status-col {
+  width: 65px;
+}
+.grid-options {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 4px 14px var(--shadow);
+  animation: focus-content-appear 160ms ease;
+}
+.grid-options input { width: 100%; padding: 7px; font: inherit; }
+.grid-options [role="listbox"] { max-height: 180px; overflow: auto; }
+.grid-options button { display: block; width: 100%; text-align: left; padding: 7px; }
+.grid-options [aria-selected="true"] { background: var(--hover); }
+@media (prefers-reduced-motion: reduce) { .grid-options { animation: none; } }
+.plan-status {
+  vertical-align: middle;
+  color: var(--muted);
+}
+.plan-status-icon {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.plan-status-icon[data-status="pending"] { color: #e1b521; }
+.plan-status-icon[data-status="finished"] { color: #32a852; }
+.plan-status-icon[data-status="cancelled"] { color: #e04a47; }
 .code-col {
-  width: 60px;
+  width: 90px;
 }
 .estimate-col {
   width: 92px;
@@ -517,7 +551,7 @@ td.hours > span {
   top: 16px;
 }
 .priority-dots {
-  top: 19px;
+  top: 50%;
   left: 9px;
 }
 .refs-cell input {
@@ -904,7 +938,29 @@ body,
   transition-duration: 800ms, 180ms;
   transition-timing-function: linear, ease;
 }
+#app .focus-card {
+  transition-property: padding-top, padding-bottom, color, background-color;
+  transition-duration: 250ms, 250ms, 180ms, 180ms;
+  transition-timing-function: ease;
+}
+#app .focus-progress {
+  transition-property: margin-top, background-color;
+  transition-duration: 250ms, 180ms;
+}
+.focus-remaining > time,
+.focus-expired-actions,
+.focus-progress {
+  animation: focus-content-appear 250ms ease both;
+}
+@keyframes focus-content-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
+  #app .focus-card,
+  #app .focus-progress {
+    transition-duration: 0s;
+  }
   :root,
   body,
   #app,
@@ -912,6 +968,7 @@ body,
   #app *::before,
   #app *::after {
     transition-duration: 0s;
+    animation-duration: 0s;
   }
 }
 

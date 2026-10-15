@@ -37,6 +37,7 @@ export const task = (tasks) => ({
   code: nextCode(tasks),
   estimate: "",
   priority: "Baja",
+  projectId: "",
   name: "",
 });
 export function union(blocks) {
@@ -125,6 +126,7 @@ export function normalizePriority(value) {
 }
 export function normalizeDocument(doc) {
   for (const t of doc.tasks) {
+    t.projectId ||= "";
     t.priority = normalizePriority(t.priority);
     t.estimate = Number.isFinite(minutes(t.estimate))
       ? time(minutes(t.estimate))
@@ -157,13 +159,18 @@ export function registerTasks(data, doc) {
   const ids = new Set(doc.blocks.filter(duration).flatMap((b) => b.taskIds));
   for (const t of doc.tasks) {
     if (!ids.has(t.id) || !t.name.trim()) continue;
-    let known = data.tasks.find((k) => normalize(k.name) === normalize(t.name));
+    let known = data.tasks.find(
+      (k) =>
+        normalize(k.name) === normalize(t.name) &&
+        (k.projectId || "") === (t.projectId || ""),
+    );
     if (!known) {
       known = {
         id: data.tasks.some((k) => k.id === t.taskId)
           ? uid()
           : t.taskId || uid(),
         name: t.name.trim(),
+        projectId: t.projectId || "",
       };
       data.tasks.push(known);
     }
@@ -254,6 +261,28 @@ export function validate(data) {
     )
   )
     throw Error("Catálogo inválido");
+  const projects = data.projects || [];
+  if (
+    !Array.isArray(projects) ||
+    projects.some(
+      (p) =>
+        !p ||
+        typeof p.id !== "string" ||
+        !p.id ||
+        typeof p.name !== "string" ||
+        !p.name.trim() ||
+        p.name.length > 120,
+    ) ||
+    new Set(projects.map((p) => p.id)).size !== projects.length ||
+    new Set(projects.map((p) => normalize(p.name))).size !== projects.length
+  )
+    throw Error("Proyectos inválidos");
+  const projectIds = new Set(projects.map((p) => p.id));
+  const validProject = (t) =>
+    t.projectId === undefined ||
+    t.projectId === "" ||
+    (typeof t.projectId === "string" && projectIds.has(t.projectId));
+  if (!data.tasks.every(validProject)) throw Error("Proyecto inválido");
   for (const [date, day] of Object.entries(data.days)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !day.plan)
       throw Error("Jornada inválida");
@@ -276,6 +305,7 @@ export function validate(data) {
         )
       )
         throw Error("Tarea inválida");
+      if (!doc.tasks.every(validProject)) throw Error("Proyecto inválido");
       const ids = new Set(doc.tasks.map((t) => t.id));
       if (ids.size !== doc.tasks.length) throw Error("Identidad duplicada");
       if (

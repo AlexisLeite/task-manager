@@ -1,4 +1,8 @@
+import { openGridOptions } from "./grid-options.js";
+import { projectsHtml, bindProjects, projectOptions } from "./projects.js";
 import "./history.css";
+import { timeFieldAttributes, bindTimeFields } from "./time-field.js";
+bindTimeFields();
 import autoAnimate from "@formkit/auto-animate";
 import "./style.css";
 import { historyHtml } from "./history.js";
@@ -38,11 +42,11 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const fields = {
-  tasks: ["code", "estimate", "priority", "name"],
+  tasks: ["code", "estimate", "priority", "name", "projectId"],
   blocks: ["refs", "description", "start", "end"],
 };
 const labels = {
-  tasks: ["Identificador", "Duración", "Prioridad", "Descripción"],
+  tasks: ["Identificador", "Duración", "Prioridad", "Descripción", "Proyecto"],
   blocks: ["Tarea", "Descripción", "Hora inicio", "Hora fin"],
 };
 const esc = (value) =>
@@ -53,7 +57,12 @@ const esc = (value) =>
         c
       ],
   );
-const viewRoutes = { focus: "foco", day: "jornada", month: "historia" };
+const viewRoutes = {
+  focus: "foco",
+  day: "jornada",
+  month: "historia",
+  projects: "proyectos",
+};
 let historyFilters = { from: "", to: "" };
 const routeView = () =>
   location.hash === "#/mes"
@@ -67,7 +76,7 @@ function navigate(next, push = true) {
   if (push && location.hash !== `#/${viewRoutes[next]}`)
     window.history.pushState(null, "", `#/${viewRoutes[next]}`);
   if (next === view) return;
-  const order = ["focus", "day", "month"];
+  const order = ["focus", "day", "month", "projects"];
   document.documentElement.dataset.navigation =
     order.indexOf(next) > order.indexOf(view) ? "forward" : "back";
   pageTransition?.skipTransition();
@@ -329,7 +338,7 @@ function errorFor(grid, r) {
   return "";
 }
 function updateView() {
-  if (!doc()) return;
+  if (!doc() || mode === "actual") return;
   for (const b of doc().blocks)
     b.description = resolved(doc(), b)
       .map((t) => t.name)
@@ -341,6 +350,8 @@ function updateView() {
       error = errorFor(grid, r);
     tr.classList.toggle("invalid", !!error);
     tr.title = error;
+    const statusCell = tr.querySelector(".plan-status");
+    if (statusCell) statusCell.innerHTML = planStatus(r);
     tr.querySelectorAll("input").forEach((input) =>
       input.setAttribute("aria-invalid", !!error),
     );
@@ -357,7 +368,7 @@ function updateView() {
       if (el !== document.activeElement)
         el.value = doc().blocks[+el.dataset.row]?.description || "";
     });
-  document.querySelectorAll(".priority-dots").forEach((el) => {
+  document.querySelectorAll(".priority-dots[data-block]").forEach((el) => {
     el.innerHTML = priorityDots(doc().blocks[+el.dataset.block]);
     el.closest("td").style.setProperty(
       "--priority-space",
@@ -395,6 +406,12 @@ function updateView() {
       if (el !== document.activeElement)
         el.value = doc().tasks[+el.dataset.row]?.estimate || "";
     });
+  document
+    .querySelectorAll('[data-grid="tasks"][data-col="4"]')
+    .forEach((el) => {
+      if (el !== document.activeElement)
+        el.value = doc().tasks[+el.dataset.row]?.projectId || "";
+    });
   const sum = totals({
     ...doc(),
     blocks: doc().blocks.filter((b) => !b.refsText),
@@ -413,9 +430,9 @@ function closeSuggestions() {
   document.querySelector("#suggestions")?.remove();
   suggestions = null;
 }
-function showSuggestions(input) {
+function showSuggestions(input, all = false) {
   closeSuggestions();
-  const query = normalize(input.value);
+  const query = all ? "" : normalize(input.value);
   const matches = data.tasks
     .filter(
       (t) => normalize(t.name).includes(query) && normalize(t.name) !== query,
@@ -459,6 +476,7 @@ function chooseSuggestion(i) {
   const r = doc().tasks[+input.dataset.row];
   r.name = t.name;
   r.taskId = t.id;
+  r.projectId = t.projectId || "";
   input.value = t.name;
   closeSuggestions();
   save();
@@ -508,10 +526,32 @@ function priorityControl(
 ) {
   return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Baja", "Media", "Alta"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
 }
-const columnOrder = (grid) => (grid === "tasks" ? [2, 0, 1, 3] : [0, 1, 2, 3]);
+const columnOrder = (grid) =>
+  grid === "tasks" ? [2, 0, 1, 3, 4] : [0, 1, 2, 3];
+function planStatus(row) {
+  return row.taskIds
+    .map((id) => {
+      const task = doc().tasks.find((task) => task.id === id);
+      const state = row.focusStates?.[id];
+      const label =
+        state === "finished"
+          ? "Terminada"
+          : state === "cancelled"
+            ? "Cancelada"
+            : "Pendiente";
+      const shape =
+        state === "finished"
+          ? '<path d="m3 8 3 3 7-7"/>'
+          : state === "cancelled"
+            ? '<path d="m4 4 8 8M12 4l-8 8"/>'
+            : '<circle cx="8" cy="8" r="6"/><path d="M8 4v4l3 2"/>';
+      return `<span class="plan-status-icon" data-status="${state === "finished" ? "finished" : state === "cancelled" ? "cancelled" : "pending"}" role="img" aria-label="${esc(task?.code || "")}: ${label}" title="${esc(task?.name || task?.code || "")}: ${label}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shape}</svg></span>`;
+    })
+    .join("");
+}
 function gridHtml(grid) {
   const isTask = grid === "tasks";
-  return `<div class="grid-scroll"><table data-table="${grid}" aria-label="${isTask ? "Tareas para hoy" : "Plan de trabajo"}"><colgroup>${isTask ? '<col class="grip-col"><col class="priority-col"><col class="code-col"><col class="estimate-col"><col>' : '<col class="grip-col"><col class="refs-col"><col><col class="time-col"><col class="time-col">'}</colgroup><thead><tr><th></th>${(isTask ? ["Prioridad", "Tarea", "Duración", "Descripción"] : ["Tarea", "Descripción", "Hora inicio", "Hora fin"]).map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows(
+  return `<div class="grid-scroll"><table data-table="${grid}" aria-label="${isTask ? "Tareas para hoy" : "Plan de trabajo"}"><colgroup>${isTask ? '<col class="grip-col"><col class="code-col"><col class="estimate-col"><col><col class="project-col">' : '<col class="grip-col"><col class="refs-col"><col><col class="time-col"><col class="time-col"><col class="status-col">'}</colgroup><thead><tr><th></th>${(isTask ? ["Tarea", "Duración", "Descripción", "Proyecto"] : ["Tarea", "Descripción", "Hora inicio", "Hora fin", "Estado"]).map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows(
     grid,
   )
     .map(
@@ -519,18 +559,23 @@ function gridHtml(grid) {
         `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="${grid}" data-index="${i}" aria-label="Seleccionar ${isTask ? "tarea" : "bloque"} ${i + 1}">⠿</button></td>${columnOrder(
           grid,
         )
+          .filter((c) => !isTask || c !== 2)
           .map((c) => {
             const field = fields[grid][c];
             const value = field === "refs" ? blockReferences(r) : r[field],
               attrs = `data-grid="${grid}" data-row="${i}" data-col="${c}" aria-label="${isTask ? "Tarea" : "Plan"} ${i + 1}: ${labels[grid][c]}"`;
+            if (field === "projectId")
+              return `<td><select ${attrs}>${projectOptions(data, value)}</select></td>`;
             if (field === "priority")
               return `<td class="task-priority-cell">${priorityControl(r, attrs)}</td>`;
             const readonly =
               grid === "blocks" &&
               (field === "refs" || field === "description");
-            return `<td class="${field === "start" || field === "end" ? "hours" : ""} ${field === "refs" ? "refs-cell" : ""}">${field === "refs" ? `<span class="priority-dots" data-block="${i}">${priorityDots(r)}</span>` : ""}<input autocomplete="off" ${attrs} value="${esc(value)}" ${readonly ? "readonly" : ""} ${["estimate", "start", "end"].includes(field) ? 'inputmode="numeric" maxlength="5" pattern="[0-9]{2}:[0-5][0-9]" placeholder="hh:mm"' : ""} ${isTask && field === "name" ? 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"' : ""}>${field === "start" || field === "end" ? '<span class="unit" aria-hidden="true">hs</span>' : ""}</td>`;
+            return `<td class="${field === "start" || field === "end" ? "hours" : ""} ${field === "refs" || (isTask && field === "code") ? "refs-cell" : ""}">${isTask && field === "code" ? `<span class="priority-dots">${priorityControl(r, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i + 1}: Prioridad"`)}</span>` : ""}${field === "refs" ? `<span class="priority-dots" data-block="${i}">${priorityDots(r)}</span>` : ""}<input autocomplete="off" ${attrs} value="${esc(value)}" ${readonly ? "readonly" : ""} ${["estimate", "start", "end"].includes(field) ? timeFieldAttributes(field !== "estimate") : ""} ${isTask && field === "name" ? 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"' : ""}>${field === "start" || field === "end" ? '<span class="unit" aria-hidden="true">hs</span>' : ""}</td>`;
           })
-          .join("")}</tr>`,
+          .join(
+            "",
+          )}${isTask ? "" : `<td class="plan-status">${planStatus(r)}</td>`}</tr>`,
     )
     .join(
       "",
@@ -565,7 +610,7 @@ function activeFocus() {
   const rank = (id) => (order.includes(id) ? order.indexOf(id) : order.length);
   const groups = new Map();
   for (const entry of [...active.values()].sort(
-    (a, b) => rank(a.task.id) - rank(b.task.id),
+    (a, b) => a.end - b.end || rank(a.task.id) - rank(b.task.id),
   )) {
     const key = `${entry.start}-${entry.end}`;
     if (!groups.has(key)) groups.set(key, []);
@@ -639,18 +684,14 @@ function extendTask(key, blockId, taskId, choose = false) {
         Math.max(minutes(row.end), now.getHours() * 60 + now.getMinutes()) + 30,
       ),
     );
-    dialog.innerHTML = `<form><h2>Extender tarea</h2><p>${esc(task.name || task.code)}</p><label>Hora de finalización<input name="end" type="text" inputmode="numeric" maxlength="5" pattern="[0-2][0-9]:[0-5][0-9]" placeholder="hh:mm" required value="${suggested}"></label><p role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">Extender</button></div></form>`;
+    dialog.innerHTML = `<form><h2>Extender tarea</h2><p>${esc(task.name || task.code)}</p><label>Hora de finalización<input name="end" ${timeFieldAttributes()} required value="${suggested}"></label><p role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">Extender</button></div></form>`;
     dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
     dialog.querySelector("form").onsubmit = (event) => {
       event.preventDefault();
       const end = dialog.querySelector("input").value;
-      if (
-        !clock(end) ||
-        minutes(end) <= minutes(row.end) ||
-        new Date(`${key}T${end}:00`) <= new Date()
-      ) {
+      if (!clock(end) || new Date(`${key}T${end}:00`) <= new Date()) {
         dialog.querySelector("[role=alert]").textContent =
-          "Elegí una hora hh:mm posterior al fin previsto y al momento actual.";
+          "Elegí una hora hh:mm posterior al momento actual.";
         return;
       }
       if (!plan.blocks.includes(row) || row.focusStates?.[taskId]) {
@@ -722,7 +763,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   const dialog = document.createElement("dialog");
   dialog.className = "task-dialog";
   dialog.setAttribute("aria-labelledby", "postpone-title");
-  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" type="time" required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p><p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
+  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" ${timeFieldAttributes()} required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p><p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
   document.body.append(dialog);
   dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
   dialog.addEventListener("click", (event) => {
@@ -1258,17 +1299,29 @@ document.addEventListener("click", (e) => {
   });
 });
 
+function actualHtml(actual) {
+  if (!actual?.blocks.length)
+    return '<h2>Realizado</h2><p class="empty">Todavía no hay trabajo registrado desde Foco.</p>';
+  return `<h2>Realizado</h2><div class="grid-scroll"><table aria-label="Trabajo realizado"><thead><tr><th>Tarea</th><th>Descripción</th><th>Hora inicio</th><th>Hora fin</th><th>Duración</th></tr></thead><tbody>${actual.blocks
+    .map((row) => {
+      const tasks = resolved(actual, row);
+      return `<tr><td>${esc(tasks.map((task) => task.code).join(", "))}</td><td>${esc(tasks.map((task) => task.name).join(" / "))}</td><td>${esc(row.start)}</td><td>${esc(row.end)}</td><td>${esc(time(duration(row)))}</td></tr>`;
+    })
+    .join(
+      "",
+    )}</tbody></table></div><p>Total realizado: ${esc(format(totals(actual).work))} hs</p>`;
+}
 function render() {
   isRendering = true;
   closeSuggestions();
   clearSelection();
   const d = day();
-  if (doc()) {
+  if (doc() && mode === "plan") {
     syncPlan(doc());
     if (mode === "plan") deriveEnds(doc());
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" && !d.actual ? '<h1>Realizado</h1><button id="reconcile">Comenzar reconciliación desde el plan</button>' : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   bind();
   if (view === "day" && doc()) updateView();
   isRendering = false;
@@ -1276,22 +1329,12 @@ function render() {
 
 function bind() {
   bindFocus();
-  for (const field of ["from", "to"]) {
-    const input = document.getElementById(`history-${field}`);
-    if (input)
-      input.onchange = () => {
-        historyFilters[field] = input.value;
-        render();
-        document.getElementById(`history-${field}`)?.focus();
-      };
-  }
-  bindHistoryControls(historyFilters);
-  const clearHistory = document.getElementById("history-clear");
-  if (clearHistory)
-    clearHistory.onclick = () => {
-      historyFilters = { ...historyFilters, from: "", to: "" };
-      render();
-    };
+  bindProjects(data, checkpoint, save);
+  bindHistoryControls(historyFilters, data, (key) => {
+    date = key;
+    mode = "actual";
+    navigate("day");
+  });
   if (view === "day" && doc() && (doc().tasks.length || doc().blocks.length)) {
     const button = document.createElement("button");
     button.id = "example";
@@ -1317,6 +1360,7 @@ function bind() {
   on("nav-day", () => navigate("day"));
   on("nav-focus", () => navigate("focus"));
   on("nav-history", () => navigate("month"));
+  on("nav-projects", () => navigate("projects"));
   on("theme", toggleTheme);
   document.querySelector("#date").onchange = (e) => {
     if (e.target.value) changeDate(e.target.value);
@@ -1341,11 +1385,6 @@ function bind() {
     clearSelection();
     render();
   });
-  on("reconcile", () =>
-    commit(() => {
-      day().actual = structuredClone(day().plan);
-    }),
-  );
   on("example", () => {
     if (
       (doc().tasks.length || doc().blocks.length) &&
@@ -1417,6 +1456,7 @@ function bind() {
   };
 }
 function bindGrids() {
+  if (mode === "actual") return;
   document
     .querySelectorAll(".priority-dots")
     .forEach((el) =>
@@ -1525,8 +1565,11 @@ function bindGrids() {
       else r[field] = el.value;
       if (field === "name") {
         r.taskId =
-          data.tasks.find((t) => normalize(t.name) === normalize(el.value))
-            ?.id || r.taskId;
+          data.tasks.find(
+            (t) =>
+              normalize(t.name) === normalize(el.value) &&
+              (t.projectId || "") === (r.projectId || ""),
+          )?.id || r.taskId;
         showSuggestions(el);
       }
       updateView();
@@ -1634,6 +1677,22 @@ function gridKey(e) {
   const grid = e.target.dataset.grid,
     i = +e.target.dataset.row,
     c = +e.target.dataset.col;
+  const optionsControl = e.target.matches('select, summary');
+  if (optionsControl && e.target.closest('details')?.open && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+    e.preventDefault();
+    openGridOptions(e.target);
+    return;
+  }
+  if (optionsControl && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'Enter' || e.key.length === 1)) {
+    e.preventDefault();
+    openGridOptions(e.target, e.key === 'Enter' ? '' : e.key);
+    return;
+  }
+  if (fields[grid]?.[c] === 'name' && e.key === 'Enter' && !suggestions && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    showSuggestions(e.target, true);
+    return;
+  }
   if (suggestions?.input === e.target && !e.altKey && !e.shiftKey) {
     if (["ArrowUp", "ArrowDown"].includes(e.key)) {
       e.preventDefault();
@@ -1647,9 +1706,9 @@ function gridKey(e) {
       e.target.setAttribute("aria-activedescendant", `option-${s.index}`);
       return;
     }
-    if (e.key === "Enter" && suggestions.index >= 0) {
+    if (e.key === "Enter" && suggestions.matches.length) {
       e.preventDefault();
-      chooseSuggestion(suggestions.index);
+      chooseSuggestion(Math.max(0, suggestions.index));
       return;
     }
     if (e.key === "Escape") {
@@ -1666,7 +1725,7 @@ function gridKey(e) {
   }
   if (["Home", "End"].includes(e.key) && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
-    const column = e.key === "Home" ? columnOrder(grid)[0] : 3;
+    const column = e.key === "Home" ? columnOrder(grid)[0] : columnOrder(grid).at(-1);
     focusCell(grid, i, column);
     const input = document.activeElement,
       position = e.key === "Home" ? 0 : input.value.length;
@@ -1698,7 +1757,7 @@ function gridKey(e) {
     return;
   }
   if (["ArrowUp", "ArrowDown"].includes(e.key) && !e.shiftKey) {
-    if (e.target.tagName === "SELECT") return;
+
     e.preventDefault();
     focusCell(
       grid,
@@ -1713,9 +1772,9 @@ function gridKey(e) {
   if (
     !e.shiftKey &&
     ((e.key === "ArrowLeft" &&
-      (e.target.tagName === "SUMMARY" || e.target.selectionStart === 0)) ||
+      ((e.target.tagName === "SUMMARY" || e.target.tagName === "SELECT") || e.target.selectionStart === 0)) ||
       (e.key === "ArrowRight" &&
-        (e.target.tagName === "SUMMARY" ||
+        ((e.target.tagName === "SUMMARY" || e.target.tagName === "SELECT") ||
           e.target.selectionStart === e.target.value?.length)))
   ) {
     e.preventDefault();
@@ -1726,7 +1785,7 @@ function gridKey(e) {
         Math.max(
           0,
           Math.min(
-            3,
+            columnOrder(grid).length - 1,
             columnOrder(grid).indexOf(c) + (e.key === "ArrowRight" ? 1 : -1),
           ),
         )
@@ -1740,11 +1799,18 @@ function gridKey(e) {
     else focusCell(grid, i + 1, c);
   }
   if (e.key === "Tab") {
-    const next = i * 4 + columnOrder(grid).indexOf(c) + (e.shiftKey ? -1 : 1);
+    const count = columnOrder(grid).length;
+    const next =
+      i * count + columnOrder(grid).indexOf(c) + (e.shiftKey ? -1 : 1);
     if (next < 0) return;
     e.preventDefault();
-    if (next >= rows(grid).length * 4) add(grid);
-    else focusCell(grid, Math.floor(next / 4), columnOrder(grid)[next % 4]);
+    if (next >= rows(grid).length * count) add(grid);
+    else
+      focusCell(
+        grid,
+        Math.floor(next / count),
+        columnOrder(grid)[next % count],
+      );
   }
 }
 function importDefinitions(incoming) {
@@ -1755,7 +1821,8 @@ function importDefinitions(incoming) {
       doc().tasks.find(
         (t) =>
           t.taskId === source.taskId &&
-          normalize(t.name) === normalize(source.name),
+          normalize(t.name) === normalize(source.name) &&
+          (t.projectId || "") === (source.projectId || ""),
       );
     if (!t) {
       t = {
@@ -1772,7 +1839,7 @@ function importDefinitions(incoming) {
   return mapping;
 }
 document.addEventListener("keydown", (e) => {
-  if (view !== "day") return;
+  if (view !== "day" || mode === "actual") return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -1801,7 +1868,7 @@ document.addEventListener("keydown", (e) => {
 });
 for (const type of ["copy", "cut"])
   document.addEventListener(type, (e) => {
-    if (view !== "day" || !selection.indices.size) return;
+    if (view !== "day" || mode === "actual" || !selection.indices.size) return;
     e.preventDefault();
     const grid = selection.grid,
       picked = rows(grid).filter((_, i) => selection.indices.has(i));
@@ -1827,10 +1894,12 @@ for (const type of ["copy", "cut"])
         .map((r) =>
           fields[grid]
             .map((field) =>
-              (field === "refs" ? blockReferences(r) : r[field]).replace(
-                /[\t\r\n]/g,
-                " ",
-              ),
+              (field === "refs"
+                ? blockReferences(r)
+                : field === "projectId"
+                  ? data.projects?.find((p) => p.id === r.projectId)?.name || ""
+                  : r[field] || ""
+              ).replace(/[\t\r\n]/g, " "),
             )
             .join("\t"),
         )
@@ -1839,7 +1908,7 @@ for (const type of ["copy", "cut"])
     if (type === "cut") deleteRows();
   });
 document.addEventListener("paste", (e) => {
-  if (view !== "day" || !doc()) return;
+  if (view !== "day" || mode === "actual" || !doc()) return;
   const raw = e.clipboardData.getData("application/x-jornada"),
     text = e.clipboardData.getData("text/plain");
   if (!raw && !text.includes("\t") && !text.includes("\n")) return;
@@ -1862,9 +1931,9 @@ document.addEventListener("paste", (e) => {
     selection.indices.size && selection.grid === grid
       ? Math.min(...selection.indices)
       : Number(e.target.dataset.row ?? rows(grid).length) +
-        (e.target.dataset.col === "3" &&
-        e.target.value?.length &&
-        e.target.selectionStart === e.target.value.length
+        (+e.target.dataset.col === columnOrder(grid).at(-1) &&
+        (e.target.tagName === "SELECT" || (e.target.value?.length &&
+        e.target.selectionStart === e.target.value.length))
           ? 1
           : 0);
   commit(() => {
@@ -1914,7 +1983,12 @@ document.addEventListener("paste", (e) => {
               grid === "tasks" ? task([...doc().tasks, ...incoming]) : block();
           fields[grid].forEach((field, i) => {
             if (values[i] === undefined) return;
-            if (field === "refs") setReferences(r, values[i]);
+            if (field === "projectId")
+              r.projectId =
+                data.projects?.find(
+                  (p) => normalize(p.name) === normalize(values[i]),
+                )?.id || "";
+            else if (field === "refs") setReferences(r, values[i]);
             else
               r[field] = values[i].replace(
                 ["estimate", "start", "end"].includes(field)

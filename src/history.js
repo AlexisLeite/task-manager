@@ -19,7 +19,10 @@ function validDate(value) {
 }
 
 /** Read-only aggregation. Dates are inclusive; minutes are unioned per day. */
-export function buildHistory(data, { from = "", to = "" } = {}) {
+export function buildHistory(
+  data,
+  { from = "", to = "", projectIds = [] } = {},
+) {
   const result = {
     from,
     to,
@@ -27,6 +30,7 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
     totalMinutes: 0,
     dayCount: 0,
     tasks: [],
+    projects: [],
     days: [],
   };
   if ((from && !validDate(from)) || (to && !validDate(to))) {
@@ -52,6 +56,7 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
     }
   }
   const grouped = new Map();
+  const projectGroups = new Map();
   const dates = Object.entries(data.days || {})
     .filter(
       ([date, day]) =>
@@ -63,13 +68,26 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
     .sort(([a], [b]) => b.localeCompare(a));
 
   for (const [date, { actual }] of dates) {
-    const dayMinutes = totals(actual).work;
+    const selectedTasks = actual.tasks.filter(
+      (task) => !projectIds.length || projectIds.includes(task.projectId || ""),
+    );
+    const dayMinutes = totals({ ...actual, tasks: selectedTasks }).work;
     if (!dayMinutes) continue;
     result.totalMinutes += dayMinutes;
+    for (const projectId of new Set(selectedTasks.map(task => task.projectId || ''))) {
+      const minutes = totals({ tasks: selectedTasks.filter(task => (task.projectId || '') === projectId), blocks: actual.blocks }).work;
+      if (!minutes) continue;
+      const project = projectGroups.get(projectId) || { id: projectId, name: data.projects?.find(project => project.id === projectId)?.name || 'Sin proyecto', minutes: 0 };
+      project.minutes += minutes;
+      projectGroups.set(projectId, project);
+    }
     const identities = new Map();
-    for (const task of actual.tasks) {
+    for (const task of selectedTasks) {
       // Never merge distinct identities just because their names coincide.
-      const id = task.taskId || `local:${date}:${task.id}`;
+      const identity = task.taskId || `local:${date}:${task.id}`;
+      const id = task.projectId
+        ? JSON.stringify([identity, task.projectId])
+        : identity;
       if (!identities.has(id)) identities.set(id, []);
       identities.get(id).push(task);
     }
@@ -83,7 +101,10 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
       if (!minutes) continue;
       const current = grouped.get(id) || {
         id,
-        name: catalog.get(id) || definitions[0].name || definitions[0].code,
+        name:
+          catalog.get(definitions[0].taskId) ||
+          definitions[0].name ||
+          definitions[0].code,
         minutes: 0,
         days: 0,
       };
@@ -95,6 +116,7 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
     result.days.push({ date, minutes: dayMinutes, tasks: dayTasks });
   }
   result.dayCount = result.days.length;
+  result.projects = [...projectGroups.values()].sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name, 'es'));
   result.tasks = [...grouped.values()].sort(
     (a, b) =>
       b.minutes - a.minutes ||
@@ -104,16 +126,10 @@ export function buildHistory(data, { from = "", to = "" } = {}) {
   return result;
 }
 
-function dailyChart(history) {
-  const days = [...history.days].reverse();
-  const ceiling = Math.max(60, ...days.map((day) => day.minutes));
-  const bars = days
-    .map(
-      (day) =>
-        `<div class="history-day-bar" data-history-day="${escapeHtml(day.date)}" data-minutes="${day.minutes}" title="${escapeHtml(day.date)}: ${format(day.minutes)} hs realizadas"><div class="history-day-column"><span class="history-day-value">${format(day.minutes)}</span><span class="history-day-fill" style="height:${(day.minutes / ceiling) * 62}px"></span></div><span>${escapeHtml(day.date.slice(8) + "/" + day.date.slice(5, 7))}</span></div>`,
-    )
-    .join("");
-  return `<section class="history-chart" aria-labelledby="history-daily-heading"><h2 id="history-daily-heading">Horas realizadas por jornada</h2><div class="history-daily-scroll" tabindex="0" role="region" aria-label="Gráfica de jornadas, desplazamiento horizontal"><div id="history-daily-chart" role="img" aria-labelledby="history-daily-title history-daily-description" style="grid-template-columns:repeat(${days.length},minmax(48px,1fr))"><span class="visually-hidden" id="history-daily-title">Horas realizadas por jornada</span><span class="visually-hidden" id="history-daily-description">${days.length} jornadas en orden cronológico. Total ${format(history.totalMinutes)} horas, sin duplicar intervalos paralelos.</span>${bars}</div></div></section>`;
+function projectChart(history) {
+  const highest = history.projects[0]?.minutes || 1;
+  const bars = history.projects.map(project => `<div class="history-task-bar" data-history-project-bar="${escapeHtml(project.id)}" data-minutes="${project.minutes}" title="${escapeHtml(project.name)}: ${format(project.minutes)} hs"><span class="history-task-label">${escapeHtml(project.name)}</span><span class="history-task-track"><span style="width:${project.minutes / highest * 100}%"></span></span><span class="history-task-value">${format(project.minutes)}</span></div>`).join('');
+  return `<section class="history-chart" aria-labelledby="history-project-heading"><h2 id="history-project-heading">Distribución por proyecto</h2><div id="history-project-chart" role="img" aria-label="Distribución de horas realizadas por proyecto">${bars}</div></section>`;
 }
 
 function taskChart(history) {
@@ -172,23 +188,33 @@ export function historyMatches(name, query = "") {
     });
 }
 
+export function projectFilterLabel(data, ids = []) {
+  if (!ids.length) return "Todos los proyectos";
+  if (ids.length > 1) return `${ids.length} proyectos`;
+  return ids[0]
+    ? data.projects?.find((project) => project.id === ids[0])?.name ||
+        "Proyecto"
+    : "Sin proyecto";
+}
+
 export function historyHtml(data, filters = {}) {
   const history = buildHistory(data, filters);
   return `<div class="history-view">
-    <div class="history-header"><div class="history-totals"><span><b id="history-actual">${format(history.totalMinutes)} hs</b> realizadas</span><span><b id="history-days">${history.dayCount}</b> ${history.dayCount === 1 ? "jornada" : "jornadas"}</span></div><button id="history-filter-toggle" aria-expanded="${!!filters.showDates}" aria-controls="history-date-filters">Filtros${history.from || history.to ? " •" : ""}</button></div>
+    <div class="history-filter-section"><div class="history-header"><div class="history-totals"><span><b id="history-actual">${format(history.totalMinutes)} hs</b> realizadas</span><span><b id="history-days">${history.dayCount}</b> ${history.dayCount === 1 ? "jornada" : "jornadas"}</span></div><button id="history-filter-toggle" aria-expanded="${!!filters.showDates}" aria-controls="history-date-filters">Filtros${history.from || history.to || filters.projectIds?.length ? " •" : ""}</button></div>
     <div id="history-date-filters" class="history-accordion" ${filters.showDates ? "" : "hidden"}><div class="history-filters">
       <label for="history-from">Desde <input type="date" id="history-from" aria-label="Desde" value="${escapeHtml(history.from)}"></label>
       <label for="history-to">Hasta <input type="date" id="history-to" aria-label="Hasta" value="${escapeHtml(history.to)}"></label>
       <button id="history-clear">Todo el historial</button>
+      <div class="history-project-picker"><span id="history-project-label">Proyectos</span><button id="history-project-toggle" type="button" aria-labelledby="history-project-label history-project-selection" aria-expanded="false" aria-controls="history-project-popover"><span id="history-project-selection">${escapeHtml(projectFilterLabel(data, filters.projectIds))}</span><span aria-hidden="true">⌄</span></button><div id="history-project-popover" popover="auto"><button id="history-project-all" type="button">Todos los proyectos</button><div class="history-project-options">${[{ id: "", name: "Sin proyecto" }, ...(data.projects || [])].map((project) => `<label><input type="checkbox" data-history-project value="${escapeHtml(project.id)}" ${filters.projectIds?.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></div></div>
     </div></div>
-    ${history.error ? `<p class="history-error" role="alert">${escapeHtml(history.error)}</p>` : ""}
+    <p class="history-error" role="alert" ${history.error ? "" : "hidden"}>${escapeHtml(history.error)}</p>
 
-    ${history.days.length ? `<div class="history-charts">${dailyChart(history)}${taskChart(history)}</div>` : ""}
+    <div class="history-chart-region">${history.days.length ? `<div class="history-charts">${projectChart(history)}${taskChart(history)}</div>` : ""}</div>
     <div class="history-section-header"><h2>Tareas realizadas</h2><button id="history-search-toggle" aria-label="Buscar tareas realizadas" aria-expanded="${!!filters.searchOpen}" aria-controls="history-search-panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div>
     <div id="history-search-panel" class="history-accordion" ${filters.searchOpen ? "" : "hidden"}><div class="history-search-inner"><input id="history-search" type="search" aria-label="Buscar tareas por nombre" placeholder="Buscar tareas…" value="${escapeHtml(filters.query || "")}"></div></div>
     <p id="history-search-empty" class="empty" ${history.tasks.length && !history.tasks.some((task) => historyMatches(task.name, filters.query)) ? "" : "hidden"}>No hay tareas que coincidan con la búsqueda.</p>
-    <table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${history.tasks.map((task) => `<tr data-history-task="${escapeHtml(task.id)}" ${historyMatches(task.name, filters.query) ? "" : "hidden"}><td>${escapeHtml(task.name)}</td><td>${task.days}</td><td>${format(task.minutes)} hs</td></tr>`).join("")}</tbody></table>
-    ${!history.tasks.length && !history.error ? '<p class="empty">Sin trabajo realizado en este período.</p>' : ""}
+    <div class="history-table-region"><table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${history.tasks.map((task) => `<tr data-history-task="${escapeHtml(task.id)}" ${historyMatches(task.name, filters.query) ? "" : "hidden"}><td>${escapeHtml(task.name)}</td><td>${task.days}</td><td>${format(task.minutes)} hs</td></tr>`).join("")}</tbody></table>
+    ${!history.tasks.length && !history.error ? '<p class="empty">Sin trabajo realizado en este período.</p>' : ""}</div>
     <h2>Jornadas trabajadas</h2><div class="day-list">${history.days.map((day) => `<button data-date="${escapeHtml(day.date)}"><span>${escapeHtml(day.date)}</span><span>Realizado: ${format(day.minutes)} hs</span></button>`).join("")}</div>
     <p class="footnote">El total cuenta una sola vez los intervalos en paralelo. Las horas de cada tarea se muestran por separado.</p></div>`;
 }

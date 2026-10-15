@@ -218,3 +218,36 @@ test("el poll anima el reordenamiento remoto con AutoAnimate", async ({
     ),
   ).toBe(true);
 });
+
+test("proyecto se guarda en SQLite y llega a otra pestaña", async ({
+  page,
+  browser,
+  request,
+}) => {
+  await page.goto("/#/proyectos");
+  await page
+    .getByRole("textbox", { name: "Nombre del proyecto" })
+    .fill("Proyecto compartido");
+  await page.getByRole("button", { name: "Agregar", exact: true }).click();
+  await expect(page.locator("#saved")).toHaveText("Guardado");
+  await page.getByRole("button", { name: "Jornada", exact: true }).click();
+  await page.getByLabel("Fecha de jornada").fill("2026-10-15");
+  await page
+    .getByLabel("Tarea 2: Proyecto", { exact: true })
+    .selectOption({ label: "Proyecto compartido" });
+  await expect(page.locator("#saved")).toHaveText("Guardado");
+  const saved = await (await request.get("/api/workspace")).json();
+  expect(saved.days["2026-10-15"].plan.tasks[1].projectId).toBe(
+    saved.projects[0].id,
+  );
+  const context = await browser.newContext();
+  const other = await context.newPage();
+  await other.goto("http://127.0.0.1:4174/#/jornada");
+  await other.getByLabel("Fecha de jornada").fill("2026-10-15");
+  await expect(
+    other
+      .getByLabel("Tarea 2: Proyecto", { exact: true })
+      .locator("option:checked"),
+  ).toHaveText("Proyecto compartido");
+  await context.close();
+});

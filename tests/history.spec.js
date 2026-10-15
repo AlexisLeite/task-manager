@@ -48,8 +48,8 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   expect(charts[1].left).toBeGreaterThan(charts[0].left);
   expect(charts[0].height).toBeLessThan(230);
   await expect(
-    page.locator("#history-daily-chart [data-history-day]"),
-  ).toHaveCount(3);
+    page.locator("#history-project-chart [data-history-project-bar]"),
+  ).toHaveCount(1);
   await expect(
     page.locator("#history-task-chart [data-history-task-bar]"),
   ).toHaveCount(1);
@@ -57,7 +57,7 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
   await page.getByLabel("Hasta", { exact: true }).fill("2026-10-01");
   await expect(page.locator("#history-actual")).toHaveText("2:00 hs");
-  await expect(page.locator("[data-history-day]")).toHaveAttribute(
+  await expect(page.locator("[data-history-project-bar]")).toHaveAttribute(
     "data-minutes",
     "120",
   );
@@ -68,7 +68,7 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   await page
     .getByRole("button", { name: "Todo el historial", exact: true })
     .click();
-  await expect(page.locator("[data-history-day]")).toHaveCount(3);
+  await expect(page.locator("[data-history-project-bar]")).toHaveCount(1);
   await page.getByRole("button", { name: "Activar tema oscuro" }).click();
   await expect(page.locator("html")).toHaveCSS(
     "background-color",
@@ -215,7 +215,7 @@ test("Historia mantiene cinco tareas sin scroll vertical y usa todo el ancho de 
   await expect(
     page.getByRole("heading", { name: "Historia", exact: true }),
   ).toHaveCount(0);
-  await expect(page.locator(".history-task-bar")).toHaveCount(5);
+  await expect(page.locator("#history-task-chart .history-task-bar")).toHaveCount(5);
   const layout = await page.locator("#history-task-chart").evaluate((el) => ({
     height: el.clientHeight,
     scrollHeight: el.scrollHeight,
@@ -273,7 +273,7 @@ test("filtros plegados y lupa con búsqueda aproximada independiente de los tota
     "matriz",
   );
   await expect(page.locator("#history-actual")).toHaveText("6:30 hs");
-  await expect(page.locator(".history-task-bar")).toHaveCount(5);
+  await expect(page.locator("#history-task-chart .history-task-bar")).toHaveCount(5);
   await search.fill("zzzzzz");
   await expect(page.locator("#history-search-empty")).toBeVisible();
   await search.press("Escape");
