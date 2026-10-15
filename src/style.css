@@ -591,7 +591,10 @@ main:has(#focus-content) {
   width: 60%;
   justify-self: start;
   margin-left: 32px;
-  height: 3px;
+  height: 2px;
+  min-height: 2px;
+  max-height: 2px;
+  flex-shrink: 0;
   background: var(--hover);
   overflow: hidden;
 }

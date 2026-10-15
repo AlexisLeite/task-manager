@@ -917,7 +917,8 @@ test("Foco abre por defecto, conserva controles al contar y guarda orden y prior
   await expect(cards.first().locator("h2")).toHaveText(firstName);
   await cards.first().locator("h2").dragTo(cards.last());
   await expect(cards.last().locator("h2")).toHaveText(firstName);
-  await expect(page.getByRole("progressbar")).toHaveCSS("height", "3px");
+  await expect(page.getByRole("progressbar")).toHaveCSS("height", "2px");
+  await expect(page.getByRole("progressbar")).toHaveCSS("flex-shrink", "0");
   await page.getByRole("button", { name: "Activar tema oscuro" }).click();
   await page.screenshot({ path: "test-results/foco-dark.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 500 });
