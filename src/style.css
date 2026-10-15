@@ -448,7 +448,35 @@ select option {
   gap: 3px;
   position: absolute;
   left: 5px;
-  top: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.focus-menu.plan-priority > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+}
+.task-priority-cell .plan-priority {
+  display: inline-block;
+}
+.task-priority-cell {
+  vertical-align: middle;
+}
+.plan-priority > div[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  color: var(--text);
+}
+.plan-priority > div[popover]:not(:popover-open) {
+  display: none;
+}
+.refs-cell:has(.plan-priority[open]) {
+  z-index: 3;
 }
 .priority-dot {
   width: 8px;
@@ -470,7 +498,7 @@ select option {
   position: relative;
 }
 .refs-cell input {
-  padding-left: 30px;
+  padding-left: var(--priority-space, 30px);
 }
 .refs-col {
   width: 135px;
@@ -586,6 +614,7 @@ main:has(#focus-content) {
   font-variant-numeric: tabular-nums;
 }
 .focus-progress {
+  position: relative;
   grid-column: 1 / -1;
   margin-top: 2px;
   width: 60%;
@@ -684,6 +713,113 @@ main:has(#focus-content) {
   width: 24px;
   padding-inline: 0;
   text-align: center;
+  opacity: 0;
+}
+.focus-card:hover .focus-remaining > .focus-menu > summary,
+.focus-card:focus-within .focus-remaining > .focus-menu > summary,
+.focus-remaining > .focus-menu[open] > summary {
+  opacity: 1;
+}
+.upcoming-priority {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.focus-upcoming:hover .upcoming-priority,
+.focus-upcoming:focus-within .upcoming-priority {
+  opacity: 1;
+}
+@media (hover: none) {
+  .focus-remaining > .focus-menu > summary {
+    opacity: 1;
+  }
+}
+details::details-content {
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    content-visibility 160ms allow-discrete;
+}
+details[open]::details-content {
+  opacity: 1;
+}
+.task-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--panel);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+.task-dialog[open] {
+  opacity: 1;
+  transform: translateY(0);
+}
+.task-dialog::backdrop {
+  background: #0006;
+  opacity: 0;
+  transition:
+    opacity 160ms ease,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+.task-dialog[open]::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  .task-dialog[open] {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  .task-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+.task-dialog h2 {
+  margin-top: 0;
+}
+.task-dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+}
+.task-dialog input {
+  border: 1px solid var(--line);
+  width: 100%;
+}
+.task-dialog label:focus-within {
+  outline: none;
+}
+.task-dialog input:focus-visible {
+  outline-offset: -1px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.dialog-actions [type="submit"] {
+  background: var(--selected);
+}
+.dialog-error {
+  color: var(--danger);
+}
+@media (prefers-reduced-motion: reduce) {
+  details::details-content,
+  .task-dialog,
+  .task-dialog::backdrop {
+    transition: none;
+  }
 }
 .focus-menu > div {
   position: absolute;
@@ -704,6 +840,11 @@ main:has(#focus-content) {
   white-space: nowrap;
   padding: 8px 10px;
   font-size: 12px;
+}
+.focus-menu hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
 }
 .focus-card:has(.focus-menu[open]) {
   position: relative;
@@ -830,5 +971,38 @@ main {
 @keyframes page-in-left {
   from {
     transform: translateX(-100vw);
+  }
+}
+
+.focus-expired-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 13px;
+}
+
+/* Popovers retain their top-layer position while the closing fade finishes. */
+#app .plan-priority > div[popover] {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    display 160ms allow-discrete,
+    overlay 160ms allow-discrete;
+}
+#app .plan-priority > div[popover]:popover-open {
+  opacity: 1;
+  transform: none;
+}
+@starting-style {
+  #app .plan-priority > div[popover]:popover-open {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app .plan-priority > div[popover] {
+    transition: none;
   }
 }

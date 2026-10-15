@@ -7,9 +7,13 @@ test("las tareas comparten barra solo si coinciden inicio y fin, incluso en bloq
 }) => {
   await page.clock.install({ time: new Date("2026-10-15T17:00:00") });
   await page.goto("/#/foco");
-  await expect(page.locator("[data-focus-id]")).toHaveCount(2);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(2);
   await expect(page.getByRole("progressbar")).toHaveCount(1);
-  await expect(page.locator("[data-focus-id] time")).toHaveCount(1);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions)) time"),
+  ).toHaveCount(1);
   const change = async (start) => {
     const response = await request.get("/api/workspace");
     const data = await response.json();
@@ -25,11 +29,15 @@ test("las tareas comparten barra solo si coinciden inicio y fin, incluso en bloq
     await page.clock.runFor(1100);
   };
   await change("16:30");
-  await expect(page.locator("[data-focus-id]")).toHaveCount(3);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(3);
   await expect(page.getByRole("progressbar")).toHaveCount(1);
   await change("16:00");
   await expect(page.getByRole("progressbar")).toHaveCount(2);
-  await expect(page.locator("[data-focus-id] time")).toHaveCount(2);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions)) time"),
+  ).toHaveCount(2);
   await change("16:30");
   await expect(page.getByRole("progressbar")).toHaveCount(1);
 });
@@ -69,12 +77,14 @@ test("SQLite se comparte entre navegadores, persiste cambios y reconcilia desde 
   ).toHaveValue("Persistido en SQLite");
   await second.close();
   await page.getByRole("button", { name: "Foco", exact: true }).click();
-  const row = page.locator("[data-focus-id]").filter({
-    has: page.getByRole("heading", {
-      name: "Persistido en SQLite",
-      exact: true,
-    }),
-  });
+  const row = page
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions))")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Persistido en SQLite",
+        exact: true,
+      }),
+    });
   await row.locator(".focus-remaining summary").click();
   await row
     .getByRole("button", { name: "Terminar tarea", exact: true })
@@ -122,7 +132,9 @@ test("el poll actualiza un cliente abierto y difiere cambios mientras se edita",
   await page.goto("/#/foco");
   await page.evaluate(() => {
     window.originalFocusList = document.querySelector(".focus-list");
-    window.originalFocusRow = document.querySelector("[data-focus-id]");
+    window.originalFocusRow = document.querySelector(
+      "[data-focus-id]:not(:has(.focus-expired-actions))",
+    );
   });
   const context = await browser.newContext();
   try {
@@ -134,15 +146,18 @@ test("el poll actualiza un cliente abierto y difiere cambios mientras se edita",
       .fill("Cambio compartido por poll");
     await expect(other.locator("#saved")).toHaveText("Guardado");
     await page.clock.runFor(1100);
-    await expect(page.locator("[data-focus-id] h2")).toContainText([
-      "Cambio compartido por poll",
-    ]);
+    await expect(
+      page.locator("[data-focus-id]:not(:has(.focus-expired-actions)) h2"),
+    ).toContainText(["Cambio compartido por poll"]);
     await expect(page.locator("#notice")).toBeEmpty();
     expect(
       await page.evaluate(
         () =>
           window.originalFocusList === document.querySelector(".focus-list") &&
-          window.originalFocusRow === document.querySelector("[data-focus-id]"),
+          window.originalFocusRow ===
+            document.querySelector(
+              "[data-focus-id]:not(:has(.focus-expired-actions))",
+            ),
       ),
     ).toBe(true);
     await page.getByRole("button", { name: "Jornada", exact: true }).click();
@@ -170,9 +185,11 @@ test("el poll anima el reordenamiento remoto con AutoAnimate", async ({
   await page.clock.install({ time: new Date("2026-10-15T17:00:00") });
   await page.goto("/#/foco");
   await page.clock.runFor(500);
-  const names = await page.locator("[data-focus-id] h2").allTextContents();
+  const names = await page
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions)) h2")
+    .allTextContents();
   const ids = await page
-    .locator("[data-focus-id]")
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions))")
     .evaluateAll((rows) => rows.map((row) => row.dataset.focusId));
   await page.evaluate(() => {
     window.remoteAnimations = [];
@@ -190,7 +207,9 @@ test("el poll anima el reordenamiento remoto con AutoAnimate", async ({
     data,
   });
   await page.clock.runFor(1100);
-  await expect(page.locator("[data-focus-id] h2")).toHaveText(names.reverse());
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions)) h2"),
+  ).toHaveText(names.reverse());
   expect(
     await page.evaluate(() =>
       window.remoteAnimations.some((frames) =>

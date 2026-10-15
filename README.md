@@ -38,7 +38,7 @@ Las rutas `/#/foco`, `/#/jornada` y `/#/mes` permiten navegación SPA sin recarg
 
 Un mismo sondeo cada segundo recalcula las actividades según la hora y consulta cambios de otros clientes con ETag (304 si no hay novedades). La actualización es silenciosa; se pospone mientras se edita un campo o hay cambios sin guardar. Al aceptar datos externos se limpia el historial de deshacer para evitar restaurar versiones antiguas. Las tareas nuevas se crean con prioridad baja.
 
-El menú contiene **Foco, Jornada y Mes**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
+El menú contiene **Foco, Jornada e Historia**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
 
 El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Realizado el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
 
@@ -48,7 +48,7 @@ El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Reali
 
 Al escribir una descripción, aparecen tareas conocidas que ya tienen tiempo registrado en realizado. Las sugerencias se eligen con flechas y Enter o con clic. Reutilizan una identidad estable entre jornadas; una coincidencia de nombre también la reutiliza.
 
-**Mes** muestra tareas efectivamente realizadas y sus horas, jornadas reconciliadas y total planificado. El tiempo de una tarea se calcula sin duplicar sus propios intervalos. Las horas de tareas diferentes en paralelo se muestran por separado, por lo que su suma puede superar el tiempo total de jornada.
+**Historia** muestra tareas efectivamente realizadas y sus horas, jornadas trabajadas y filtros por rango de fechas. El tiempo de una tarea se calcula sin duplicar sus propios intervalos. Las horas de tareas diferentes en paralelo se muestran por separado, por lo que su suma puede superar el tiempo total de jornada.
 
 ## Teclado y portapapeles
 
@@ -67,7 +67,7 @@ Al escribir una descripción, aparecen tareas conocidas que ya tienen tiempo reg
 | Añadir tarea                                | Ctrl+Enter; también Tab al salir del último campo |
 | Deshacer / rehacer                          | Ctrl+Z / Ctrl+Shift+Z o Ctrl+Y                    |
 
-En el selector de prioridad, las flechas sin modificadores cambian la opción. En los demás campos se puede seleccionar texto con Shift+←/→ o Ctrl+A sin seleccionar la fila.
+El círculo de prioridad abre las opciones Baja, Media y Alta, tanto en Tareas para hoy como en Plan de trabajo. Enter abre el menú y Escape lo cierra. En los demás campos se puede seleccionar texto con Shift+←/→ o Ctrl+A sin seleccionar la fila.
 
 Las filas se pegan antes de la fila enfocada, o después si el cursor está al final de su último campo. **Home**, pegar: antes. **End**, pegar: después. No es necesario añadir una fila vacía. El pegado tabulado es compatible con spreadsheets:
 
@@ -108,8 +108,15 @@ npm run test:backend
 npx playwright show-report
 ```
 
-Playwright ejecuta Chromium real, levanta el servidor si es necesario y usa el portapapeles real con un solo worker para evitar interferencias del sistema. Cubre el documento original, referencias entre secciones, inclusión automática de todas las tareas, navegación, selección y movimiento de líneas, clipboard de texto y filas, TSV, drag, deshacer, reconciliación, sugerencias, identidad entre días, resumen mensual, persistencia, copias, migración, errores de almacenamiento, duración, prioridades y tema oscuro.
+Playwright ejecuta Chromium real, levanta el servidor si es necesario y usa el portapapeles real con un solo worker para evitar interferencias del sistema. Cubre el documento original, referencias entre secciones, inclusión automática de todas las tareas, navegación, selección y movimiento de líneas, clipboard de texto y filas, TSV, drag, deshacer, reconciliación, sugerencias, identidad entre días, historial con filtros de fechas, persistencia, copias, migración, errores de almacenamiento, duración, prioridades y tema oscuro.
 
 Las pruebas de contrato verifican que un adaptador asíncrono conserve el orden de escritura, que se pueda guardar después de un error y que la sincronización preserve todas las tareas. El reporte HTML queda en `playwright-report/`; se retienen trazas de fallos y capturas de la pantalla clara, oscura y angosta en `test-results/`. La validación de esta versión cubre Chromium; no certifica otros motores.
 
 Las pruebas de backend usan bases SQLite temporales, nunca los datos del usuario. Verifican persistencia al reabrir la base, seed sin sobrescritura, validación, conflictos de revisión, carga desde otro navegador y reconciliación mediante HTTP.
+
+
+## Historia y acciones de Foco
+
+Historia reúne todo el trabajo realizado, con filtros Desde/Hasta inclusivos, gráficas discretas por jornada y tarea, y acceso a cada jornada. Los intervalos paralelos cuentan una sola vez en el total; cada tarea conserva sus propias horas.
+
+El menú de cada tarea ofrece Ver definición, seguido de las acciones según su estado. Posponer permite elegir día y hora conservando la duración. Las tareas vencidas permanecen visibles con Completa y Reprogramar; esta última conserva las horas invertidas y permite elegir un nuevo horario. Los menús y modales tienen entrada y salida animada, respetando la preferencia de movimiento reducido.

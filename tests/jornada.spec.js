@@ -71,7 +71,10 @@ test("respeta el documento original: texto, cinco definiciones y cuatro bloques 
   await expect(task(page, 4)).toHaveValue(
     "Escribir reglas a mano 1:30hs mínimo",
   );
-  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveValue("Alta");
+  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveAttribute(
+    "data-priority-value",
+    "Alta",
+  );
   await expect(ref(page, 2)).toHaveValue("t2,t3");
   await expect(cell(page, "blocks", 2, "Descripción")).toHaveValue(
     "Avanzar con la matriz de casos / Preparar modelo de dominio para casos de ejemplo",
@@ -100,7 +103,7 @@ test("guardar y recargar conserva notas libres, prioridades y datos de las dos p
 }) => {
   await example(page);
   await task(page).fill("Nombre actualizado");
-  await cell(page, "tasks", 2, "Prioridad").selectOption("Media");
+  await choosePriority(cell(page, "tasks", 2, "Prioridad"), "Media");
   await cell(page, "blocks", 1, "Hora inicio").fill("14:00");
   await expect(page.locator("#saved")).toHaveText("Guardado");
   await page.reload();
@@ -109,7 +112,10 @@ test("guardar y recargar conserva notas libres, prioridades y datos de las dos p
   await expect(cell(page, "blocks", 1, "Descripción")).toHaveValue(
     "Nombre actualizado",
   );
-  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveValue("Media");
+  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveAttribute(
+    "data-priority-value",
+    "Media",
+  );
   await expect(cell(page, "blocks", 1, "Hora inicio")).toHaveValue("14:00");
 });
 test("Tab y flechas permiten escribir tareas y añadirlas al plan sin formularios", async ({
@@ -121,11 +127,12 @@ test("Tab y flechas permiten escribir tareas y añadirlas al plan sin formulario
   await page.keyboard.press("Tab");
   await page.keyboard.type("2:00");
   await page.keyboard.press("Tab");
-  await cell(page, "tasks", 1, "Prioridad").selectOption("Alta");
-  await page.keyboard.press("Tab");
+  await expect(task(page)).toBeFocused();
   await page.keyboard.type("Desarrollar");
   await page.keyboard.press("Tab");
   await expect(cell(page, "tasks", 2, "Identificador")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(cell(page, "tasks", 2, "Prioridad")).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(task(page)).toBeFocused();
   await cell(page, "blocks", 1, "Hora inicio").focus();
@@ -140,7 +147,7 @@ test("Home y Shift+End seleccionan una línea completa para cortar, con clipboar
   await example(page);
   await task(page, 2).focus();
   await page.keyboard.press("Home");
-  await expect(cell(page, "tasks", 2, "Identificador")).toBeFocused();
+  await expect(cell(page, "tasks", 2, "Prioridad")).toBeFocused();
   await page.keyboard.press("Shift+End");
   await expect(table(page, "tasks").locator("tr.selected")).toHaveCount(1);
   await page.keyboard.press("Control+x");
@@ -296,7 +303,7 @@ test("reconciliación copia las dos partes y el texto sin cambiar la planificaci
   await actual(page);
   await task(page).fill("Instalación realizada");
   await cell(page, "blocks", 1, "Hora fin").fill("16:00");
-  await cell(page, "tasks", 1, "Prioridad").selectOption("Baja");
+  await choosePriority(cell(page, "tasks", 1, "Prioridad"), "Baja");
   await page
     .getByRole("button", { name: "Planificación", exact: true })
     .click();
@@ -306,7 +313,10 @@ test("reconciliación copia las dos partes y el texto sin cambiar la planificaci
   await page.getByRole("button", { name: "Jornada", exact: true }).click();
   await page.getByRole("button", { name: "Realizado", exact: true }).click();
   await expect(task(page)).toHaveValue("Instalación realizada");
-  await expect(cell(page, "tasks", 1, "Prioridad")).toHaveValue("Baja");
+  await expect(cell(page, "tasks", 1, "Prioridad")).toHaveAttribute(
+    "data-priority-value",
+    "Baja",
+  );
 });
 test("sugerencias se eligen con teclado y conservan identidad entre jornadas", async ({
   page,
@@ -340,8 +350,8 @@ test("resumen mensual agrupa identidades, no duplica paralelos y separa meses", 
 }) => {
   await example(page);
   await actual(page);
-  await page.getByRole("button", { name: "Mes", exact: true }).click();
-  await expect(page.locator("#month-actual")).toHaveText("6:30 hs");
+  await page.getByRole("button", { name: "Historia", exact: true }).click();
+  await expect(page.locator("#history-actual")).toHaveText("6:30 hs");
   await expect(
     page
       .getByRole("table", { name: "Distribución de horas" })
@@ -350,9 +360,9 @@ test("resumen mensual agrupa identidades, no duplica paralelos y separa meses", 
   await expect(
     page.getByRole("row").filter({ hasText: "Avanzar con la matriz de casos" }),
   ).toContainText("2:30 hs");
-  await page.getByLabel("Fecha de jornada").fill("2026-11-01");
-  await expect(page.locator("#month-actual")).toHaveText("0:00 hs");
-  await page.getByLabel("Fecha de jornada").fill("2026-10-15");
+  await page.getByLabel("Desde", { exact: true }).fill("2026-11-01");
+  await expect(page.locator("#history-actual")).toHaveText("0:00 hs");
+  await page.getByRole("button", { name: "Todo el historial" }).click();
   await page.locator(".day-list button").click();
   await expect(ref(page, 2)).toHaveValue("t2,t3");
 });
@@ -408,7 +418,7 @@ test("el tema oscuro se recuerda al recargar, navegar y volver al claro", async 
     path: "test-results/jornada-dark.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Mes", exact: true }).click();
+  await page.getByRole("button", { name: "Historia", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "Activar tema claro" }).click();
   await page.reload();
@@ -454,7 +464,7 @@ test("migración conserva datos de la versión anterior y guarda copia antes de 
   await expect(cell(page, "blocks", 1, "Descripción")).toHaveValue(
     "Trabajo previo",
   );
-  await cell(page, "tasks", 1, "Prioridad").selectOption("Alta");
+  await choosePriority(cell(page, "tasks", 1, "Prioridad"), "Alta");
   expect(
     await page.evaluate(() =>
       JSON.parse(localStorage.getItem("jornada.backup.v1")),
@@ -588,19 +598,26 @@ test("prioridad solo admite Baja Media Alta y cambia círculos verde amarillo ro
 }) => {
   await example(page);
   const select = cell(page, "tasks", 1, "Prioridad");
-  await expect(select.locator("option")).toHaveText(["Baja", "Media", "Alta"]);
+  await expect(select.locator("..").locator("button")).toHaveText([
+    "Baja",
+    "Media",
+    "Alta",
+  ]);
   const colors = {
     Baja: "rgb(50, 168, 82)",
     Media: "rgb(225, 181, 33)",
     Alta: "rgb(224, 74, 71)",
   };
   for (const [priority, color] of Object.entries(colors)) {
-    await select.selectOption(priority);
+    await choosePriority(select, priority);
     await expect(
-      page.getByRole("img", { name: `t1: ${priority}`, exact: true }),
+      table(page, "blocks").getByRole("img", {
+        name: `t1: ${priority}`,
+        exact: true,
+      }),
     ).toHaveCSS("background-color", color);
   }
-  await cell(page, "tasks", 3, "Prioridad").selectOption("Baja");
+  await choosePriority(cell(page, "tasks", 3, "Prioridad"), "Baja");
   await expect(
     table(page, "blocks")
       .locator("tbody tr")
@@ -615,9 +632,9 @@ test("prioridad solo admite Baja Media Alta y cambia círculos verde amarillo ro
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Jornada", exact: true }).click();
-  await expect(select).toHaveValue("Alta");
+  await expect(select).toHaveAttribute("data-priority-value", "Alta");
   await expect(
-    page.getByRole("img", { name: "t3: Baja", exact: true }),
+    table(page, "blocks").getByRole("img", { name: "t3: Baja", exact: true }),
   ).toHaveCSS("background-color", colors.Baja);
 });
 
@@ -671,8 +688,8 @@ test("el resumen suma una misma tarea realizada en días distintos", async ({
   await cell(page, "tasks", 1, "Duración").fill("01:00");
   await cell(page, "blocks", 1, "Hora inicio").fill("09:00");
   await actual(page);
-  await page.getByRole("button", { name: "Mes", exact: true }).click();
-  await expect(page.locator("#month-actual")).toHaveText("7:30 hs");
+  await page.getByRole("button", { name: "Historia", exact: true }).click();
+  await expect(page.locator("#history-actual")).toHaveText("7:30 hs");
   const row = page
     .getByRole("table", { name: "Distribución de horas" })
     .getByRole("row")
@@ -816,63 +833,89 @@ test("el foco queda contenido en la celda con espacio alrededor del outline", as
 test("Foco muestra actividades actuales en paralelo y actualiza el tiempo restante", async ({
   page,
 }) => {
-  await page.clock.install({ time: new Date("2026-10-15T16:30:00") });
+  await page.clock.install({ time: new Date("2026-10-15T16:29:59") });
+  await page.clock.pauseAt(new Date("2026-10-15T16:30:00"));
   await example(page);
   await page.getByRole("button", { name: "Foco", exact: true }).click();
   await expect(page.locator("nav button")).toHaveText([
     "Foco",
     "Jornada",
-    "Mes",
+    "Historia",
   ]);
-  await expect(page.locator(".focus-list [data-focus-id]")).toHaveCount(2);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions))",
+    ),
+  ).toHaveCount(2);
   await expect(page.locator(".focus-list")).toContainText(
     "Avanzar con la matriz de casos",
   );
   await expect(page.locator(".focus-list")).toContainText(
     "Preparar modelo de dominio",
   );
-  await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
-    "02:30:00",
-  ]);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions)) time",
+    ),
+  ).toHaveText(["02:30:00"]);
   await expect(page.locator("table")).toHaveCount(0);
   await expect(page.getByLabel("Fecha de jornada")).toBeHidden();
   await page.clock.fastForward(1000);
-  await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
-    "02:29:59",
-  ]);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions)) time",
+    ),
+  ).toHaveText(["02:29:59"]);
   await page.clock.fastForward(8999000);
-  await expect(page.locator(".focus-list [data-focus-id]")).toHaveCount(1);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions))",
+    ),
+  ).toHaveCount(1);
   await expect(page.locator(".focus-list")).toContainText(
-    "Descanso de media hora",
+    "Descanso",
   );
-  await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
-    "00:30:00",
-  ]);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions)) time",
+    ),
+  ).toHaveText(["00:30:00"]);
   await page.screenshot({ path: "test-results/foco.png", fullPage: true });
   await page.clock.fastForward(7200000);
-  await expect(page.locator(".focus-list [data-focus-id]")).toHaveCount(0);
   await expect(
-    page.getByText("No hay actividades planificadas para este momento."),
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions))",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Completa", exact: true }).first(),
   ).toBeVisible();
 });
 
 test("Foco usa hoy aunque Jornada tenga otra fecha o esté en Realizado", async ({
   page,
 }) => {
-  await page.clock.install({ time: new Date("2026-10-15T15:00:00") });
+  await page.clock.install({ time: new Date("2026-10-15T14:59:59") });
+  await page.clock.pauseAt(new Date("2026-10-15T15:00:00"));
   await example(page);
   await actual(page);
   await task(page).fill("Solo realizado");
   await page.getByLabel("Fecha de jornada").fill("2026-10-14");
   await page.getByRole("button", { name: "Foco", exact: true }).click();
-  await expect(page.locator(".focus-list [data-focus-id]")).toHaveCount(1);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions))",
+    ),
+  ).toHaveCount(1);
   await expect(page.locator(".focus-list")).toContainText(
     "Instalar el centro de decisiones",
   );
   await expect(page.locator(".focus-list")).not.toContainText("Solo realizado");
-  await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
-    "01:30:00",
-  ]);
+  await expect(
+    page.locator(
+      ".focus-list [data-focus-id]:not(:has(.focus-expired-actions)) time",
+    ),
+  ).toHaveText(["01:30:00"]);
   await page.clock.fastForward(9 * 3600000);
   await expect(
     page.getByText("No hay actividades planificadas para este momento."),
@@ -886,7 +929,9 @@ test("Foco abre por defecto, conserva controles al contar y guarda orden y prior
   await example(page);
   await page.goto("/");
   await expect(page.locator("#nav-focus")).toHaveClass("active");
-  const cards = page.locator("[data-focus-id]");
+  const cards = page.locator(
+    "[data-focus-id]:not(:has(.focus-expired-actions))",
+  );
   const firstName = await cards.first().locator("h2").textContent();
   await cards.first().locator(".focus-priority summary").click();
   await cards
@@ -929,7 +974,10 @@ test("Foco abre por defecto, conserva controles al contar y guarda orden y prior
     fullPage: true,
   });
   await page.getByRole("button", { name: "Jornada", exact: true }).click();
-  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveValue("Baja");
+  await expect(cell(page, "tasks", 2, "Prioridad")).toHaveAttribute(
+    "data-priority-value",
+    "Baja",
+  );
 });
 
 test("Foco anticipa tres horas en gris sin activar controles y anima al terminar", async ({
@@ -943,14 +991,17 @@ test("Foco anticipa tres horas en gris sin activar controles y anima al terminar
   await expect(upcoming.locator("h2")).toHaveText([
     "Avanzar con la matriz de casos",
     "Preparar modelo de dominio para casos de ejemplo",
-    "Descanso de media hora",
+    "Descanso",
   ]);
   await expect(
     upcoming.locator('select, [role="progressbar"], [data-focus-move]'),
   ).toHaveCount(0);
   const sizes = await page.evaluate(() => ({
-    active: getComputedStyle(document.querySelector("[data-focus-id] h2"))
-      .fontSize,
+    active: getComputedStyle(
+      document.querySelector(
+        "[data-focus-id]:not(:has(.focus-expired-actions)) h2",
+      ),
+    ).fontSize,
     next: getComputedStyle(document.querySelector(".focus-upcoming h2"))
       .fontSize,
     color: getComputedStyle(document.querySelector(".focus-upcoming")).color,
@@ -961,7 +1012,9 @@ test("Foco anticipa tres horas en gris sin activar controles y anima al terminar
   expect(parseFloat(sizes.next)).toBeLessThan(parseFloat(sizes.active));
   await expect(upcoming.first()).toHaveCSS("color", "rgb(133, 140, 135)");
   await page.clock.runFor(1300);
-  await expect(page.locator("[data-focus-id]")).toHaveCount(2);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(2);
   await expect(upcoming).toHaveCount(2);
   await page.clock.fastForward(2 * 3600000 + 29 * 60000 + 58000);
   await page.clock.runFor(400);
@@ -988,9 +1041,9 @@ test("Foco anticipa tres horas en gris sin activar controles y anima al terminar
     ].find((el) => el.textContent.includes("Escribir reglas"));
   });
   await page.clock.runFor(1600);
-  await expect(page.locator("[data-focus-id] h2")).toHaveText(
-    "Descanso de media hora",
-  );
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions)) h2"),
+  ).toHaveText("Descanso");
   expect(
     await page.evaluate(
       () =>
@@ -1029,7 +1082,9 @@ test("Foco incluye próximas tareas al cruzar medianoche y respeta el límite de
   await cell(page, "blocks", 1, "Hora inicio").fill("02:00");
   await cell(page, "blocks", 2, "Hora inicio").fill("02:01");
   await page.getByRole("button", { name: "Foco", exact: true }).click();
-  await expect(page.locator("[data-focus-id]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(0);
   await expect(page.locator(".focus-upcoming")).toHaveCount(1);
   await expect(page.locator(".focus-upcoming h2")).toHaveText(
     "Instalar el centro de decisiones",
@@ -1055,10 +1110,12 @@ test("terminar una tarea paralela reconcilia solo su tiempo y cancelar no regist
   await page.clock.install({ time: new Date("2026-10-15T17:10:00") });
   await example(page);
   await page.getByRole("button", { name: "Foco", exact: true }).click();
-  const first = page.locator("[data-focus-id]").first();
+  const first = page
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions))")
+    .first();
   await first.locator(".focus-remaining summary").click();
   await expect(first.locator(".focus-remaining .focus-menu button")).toHaveText(
-    ["Terminar tarea", "Cancelar tarea"],
+    ["Ver definición", "Terminar tarea", "Posponer tarea", "Cancelar tarea"],
   );
   await page.clock.runFor(1000);
   await expect(first.locator(".focus-remaining details")).toHaveAttribute(
@@ -1068,16 +1125,22 @@ test("terminar una tarea paralela reconcilia solo su tiempo y cancelar no regist
   await first
     .getByRole("button", { name: "Terminar tarea", exact: true })
     .click();
-  await expect(page.locator("[data-focus-id]")).toHaveCount(1);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(1);
   await focusAction(
     page,
     "Preparar modelo de dominio para casos de ejemplo",
     "Cancelar tarea",
   );
-  await expect(page.locator("[data-focus-id]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(0);
   await expect(page.locator("#saved")).toHaveText("Guardado");
   await page.reload();
-  await expect(page.locator("[data-focus-id]")).toHaveCount(0);
+  await expect(
+    page.locator("[data-focus-id]:not(:has(.focus-expired-actions))"),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Jornada", exact: true }).click();
   await expect(table(page, "tasks").locator("tbody tr")).toHaveCount(5);
   await page.getByRole("button", { name: "Realizado", exact: true }).click();
@@ -1086,31 +1149,36 @@ test("terminar una tarea paralela reconcilia solo su tiempo y cancelar no regist
   await expect(cell(page, "blocks", 1, "Hora inicio")).toHaveValue("16:30");
   await expect(cell(page, "blocks", 1, "Hora fin")).toHaveValue("17:10");
   await expect(cell(page, "tasks", 1, "Duración")).toHaveValue("00:40");
-  await page.getByRole("button", { name: "Mes", exact: true }).click();
-  await expect(page.locator("#month-actual")).toHaveText("0:40 hs");
+  await page.getByRole("button", { name: "Historia", exact: true }).click();
+  await expect(page.locator("#history-actual")).toHaveText("0:40 hs");
 });
 
 test("pendientes ofrecen iniciar o cancelar; iniciar conserva duración y deja el resto del paralelo pendiente", async ({
   page,
 }) => {
-  await page.clock.install({ time: new Date("2026-10-15T15:15:00") });
+  await page.clock.install({ time: new Date("2026-10-15T15:14:59") });
+  await page.clock.pauseAt(new Date("2026-10-15T15:15:00"));
   await example(page);
   await page.getByRole("button", { name: "Foco", exact: true }).click();
   const upcoming = page.locator(".focus-upcoming[data-entry-key]").first();
   await upcoming.locator("summary").click();
   await expect(upcoming.locator(".focus-menu button")).toHaveText([
+    "Ver definición",
     "Iniciar tarea",
+    "Posponer tarea",
     "Cancelar tarea",
   ]);
   await upcoming
     .getByRole("button", { name: "Iniciar tarea", exact: true })
     .click();
-  const started = page.locator("[data-focus-id]").filter({
-    has: page.getByRole("heading", {
-      name: "Avanzar con la matriz de casos",
-      exact: true,
-    }),
-  });
+  const started = page
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions))")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Avanzar con la matriz de casos",
+        exact: true,
+      }),
+    });
   await expect(started).toHaveCount(1);
   await expect(started.locator("time")).toHaveText("02:30:00");
   await expect(page.locator(".focus-upcoming[data-entry-key] h2")).toHaveText([
@@ -1171,7 +1239,11 @@ test("terminar con reconciliación existente reemplaza esa ocurrencia y conserva
   expect(state.blocks.find((b) => b.taskIds.includes(domain.id)).end).toBe(
     "19:00",
   );
-  await page.locator("[data-focus-id] .focus-remaining summary").click();
+  await page
+    .locator(
+      "[data-focus-id]:not(:has(.focus-expired-actions)) .focus-remaining summary",
+    )
+    .click();
   await page.screenshot({ path: "test-results/foco-menu.png", fullPage: true });
 });
 
@@ -1183,10 +1255,11 @@ test("las próximas tareas se iluminan al pasar el cursor sin activarse", async 
   await page.getByRole("button", { name: "Foco", exact: true }).click();
   await page.getByRole("button", { name: "Activar tema oscuro" }).click();
   const next = page.locator(".focus-upcoming[data-entry-key]").first();
-  await expect(page.locator("[data-focus-id] h2").first()).toHaveCSS(
-    "color",
-    "rgb(185, 192, 186)",
-  );
+  await expect(
+    page
+      .locator("[data-focus-id]:not(:has(.focus-expired-actions)) h2")
+      .first(),
+  ).toHaveCSS("color", "rgb(185, 192, 186)");
   const activeColor = "rgb(185, 192, 186)";
   await expect(next).toHaveCSS("color", "rgb(98, 107, 101)");
   await next.hover();
@@ -1212,7 +1285,9 @@ test("Foco simplifica la fila, permite drag y conserva resaltado con menú abier
     0,
   );
   await expect(page.getByText("Inicio", { exact: true })).toHaveCount(0);
-  const active = page.locator("[data-focus-id]");
+  const active = page.locator(
+    "[data-focus-id]:not(:has(.focus-expired-actions))",
+  );
   const first = await active.first().locator("h2").textContent();
   await active.first().locator("h2").dragTo(active.last());
   await expect(active.last().locator("h2")).toHaveText(first);
@@ -1249,7 +1324,9 @@ test("los menús de prioridad y acciones se cierran al hacer clic fuera y al abr
   await page.clock.install({ time: new Date("2026-10-15T17:00:00") });
   await example(page);
   await page.getByRole("button", { name: "Foco", exact: true }).click();
-  const row = page.locator("[data-focus-id]").first();
+  const row = page
+    .locator("[data-focus-id]:not(:has(.focus-expired-actions))")
+    .first();
   const priority = row.locator(".focus-priority");
   const actions = row.locator(".focus-remaining .focus-menu");
   await priority.locator("summary").click();
@@ -1317,12 +1394,12 @@ test("rutas SPA, historial y transición direccional entre Foco Jornada Mes", as
   });
   await page.getByRole("button", { name: "Jornada", exact: true }).click();
   await expect(page).toHaveURL(/#\/jornada$/);
-  await page.getByRole("button", { name: "Mes", exact: true }).click();
-  await expect(page).toHaveURL(/#\/mes$/);
+  await page.getByRole("button", { name: "Historia", exact: true }).click();
+  await expect(page).toHaveURL(/#\/historia$/);
   await page.goBack();
   await expect(page.locator("#nav-day")).toHaveClass("active");
   await page.goForward();
-  await expect(page.locator("#nav-month")).toHaveClass("active");
+  await expect(page.locator("#nav-history")).toHaveClass("active");
   await page.getByRole("button", { name: "Foco", exact: true }).click();
   await expect(page).toHaveURL(/#\/foco$/);
   expect(await page.evaluate(() => window.routeSentinel)).toBe(42);
@@ -1338,8 +1415,16 @@ test("rutas SPA, historial y transición direccional entre Foco Jornada Mes", as
     ).animationName,
   }));
   expect(animations).toEqual({ old: "page-out-right", next: "page-in-left" });
-  await page.goto("/#/mes");
-  await expect(page.locator("#nav-month")).toHaveClass("active");
+  await page.goto("/#/historia");
+  await expect(page.locator("#nav-history")).toHaveClass("active");
   await page.reload();
-  await expect(page.locator("#nav-month")).toHaveClass("active");
+  await expect(page.locator("#nav-history")).toHaveClass("active");
 });
+
+async function choosePriority(control, priority) {
+  await control.click();
+  await control
+    .locator("..")
+    .getByRole("button", { name: priority, exact: true })
+    .click();
+}

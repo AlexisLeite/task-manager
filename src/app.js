@@ -1,5 +1,7 @@
+import "./history.css";
 import autoAnimate from "@formkit/auto-animate";
 import "./style.css";
+import { historyHtml } from "./history.js";
 import { Repository, LocalStorageAdapter, BackendAdapter } from "./storage.js";
 import {
   uid,
@@ -50,11 +52,14 @@ const esc = (value) =>
         c
       ],
   );
-const viewRoutes = { focus: "foco", day: "jornada", month: "mes" };
+const viewRoutes = { focus: "foco", day: "jornada", month: "historia" };
+let historyFilters = { from: "", to: "" };
 const routeView = () =>
-  Object.keys(viewRoutes).find(
-    (key) => location.hash === `#/${viewRoutes[key]}`,
-  ) || "focus";
+  location.hash === "#/mes"
+    ? "month"
+    : Object.keys(viewRoutes).find(
+        (key) => location.hash === `#/${viewRoutes[key]}`,
+      ) || "focus";
 let pageTransition;
 let isRendering = false;
 function navigate(next, push = true) {
@@ -353,7 +358,30 @@ function updateView() {
     });
   document.querySelectorAll(".priority-dots").forEach((el) => {
     el.innerHTML = priorityDots(doc().blocks[+el.dataset.block]);
+    el.closest("td").style.setProperty(
+      "--priority-space",
+      `${el.children.length * 15 + 10}px`,
+    );
   });
+  document
+    .querySelectorAll('[data-grid="tasks"][data-col="2"]')
+    .forEach((el) => {
+      const t = doc().tasks[+el.dataset.row];
+      if (!t) return;
+      el.dataset.priorityValue = t.priority;
+      const dot = el.querySelector(".priority-dot");
+      dot.className = `priority-dot ${t.priority.toLowerCase()}`;
+      dot.setAttribute("aria-label", `${t.code}: ${t.priority}`);
+      dot.title = `${t.code}: ${t.priority}`;
+      el.closest("details")
+        .querySelectorAll("[data-plan-priority]")
+        .forEach((button) =>
+          button.setAttribute(
+            "aria-pressed",
+            button.dataset.planPriority === t.priority,
+          ),
+        );
+    });
   document
     .querySelectorAll('[data-grid="blocks"][data-col="3"]')
     .forEach((el) => {
@@ -470,27 +498,32 @@ function deriveEnds(document) {
 function priorityDots(b) {
   if (!b) return "";
   return resolved(doc(), b)
-    .map(
-      (t) =>
-        `<span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span>`,
-    )
+    .map((t) => priorityControl(t))
     .join("");
 }
+function priorityControl(
+  t,
+  attrs = `aria-label="Prioridad de ${esc(t.code)}: ${esc(t.name)}"`,
+) {
+  return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Baja", "Media", "Alta"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
+}
+const columnOrder = (grid) => (grid === "tasks" ? [2, 0, 1, 3] : [0, 1, 2, 3]);
 function gridHtml(grid) {
   const isTask = grid === "tasks";
-  return `<div class="grid-scroll"><table data-table="${grid}" aria-label="${isTask ? "Tareas para hoy" : "Plan de trabajo"}"><colgroup>${isTask ? '<col class="grip-col"><col class="code-col"><col class="estimate-col"><col class="priority-col"><col>' : '<col class="grip-col"><col class="refs-col"><col><col class="time-col"><col class="time-col">'}</colgroup><thead><tr><th></th>${(isTask ? ["Tarea", "Duración", "Prioridad", "Descripción"] : ["Tarea", "Descripción", "Hora inicio", "Hora fin"]).map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows(
+  return `<div class="grid-scroll"><table data-table="${grid}" aria-label="${isTask ? "Tareas para hoy" : "Plan de trabajo"}"><colgroup>${isTask ? '<col class="grip-col"><col class="priority-col"><col class="code-col"><col class="estimate-col"><col>' : '<col class="grip-col"><col class="refs-col"><col><col class="time-col"><col class="time-col">'}</colgroup><thead><tr><th></th>${(isTask ? ["Prioridad", "Tarea", "Duración", "Descripción"] : ["Tarea", "Descripción", "Hora inicio", "Hora fin"]).map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows(
     grid,
   )
     .map(
       (r, i) =>
-        `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="${grid}" data-index="${i}" aria-label="Seleccionar ${isTask ? "tarea" : "bloque"} ${i + 1}">⠿</button></td>${fields[
-          grid
-        ]
-          .map((field, c) => {
+        `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="${grid}" data-index="${i}" aria-label="Seleccionar ${isTask ? "tarea" : "bloque"} ${i + 1}">⠿</button></td>${columnOrder(
+          grid,
+        )
+          .map((c) => {
+            const field = fields[grid][c];
             const value = field === "refs" ? blockReferences(r) : r[field],
               attrs = `data-grid="${grid}" data-row="${i}" data-col="${c}" aria-label="${isTask ? "Tarea" : "Plan"} ${i + 1}: ${labels[grid][c]}"`;
             if (field === "priority")
-              return `<td><select ${attrs}>${["Baja", "Media", "Alta"].map((p) => `<option ${value === p ? "selected" : ""}>${p}</option>`).join("")}</select></td>`;
+              return `<td class="task-priority-cell">${priorityControl(r, attrs)}</td>`;
             const readonly =
               grid === "blocks" &&
               (field === "refs" || field === "description");
@@ -502,51 +535,6 @@ function gridHtml(grid) {
       "",
     )}</tbody></table></div>${isTask ? '<button class="add" id="add-tasks">+ Tarea</button>' : ""}`;
 }
-function monthly() {
-  const month = date.slice(0, 7),
-    days = Object.entries(data.days)
-      .filter(
-        ([key, d]) =>
-          key.startsWith(month) &&
-          (d.plan.tasks.length || d.plan.blocks.length || d.actual),
-      )
-      .sort(([a], [b]) => a.localeCompare(b));
-  const stats = new Map();
-  let planned = 0,
-    total = 0,
-    count = 0;
-  for (const [, d] of days) {
-    planned += totals(d.plan).work;
-    if (!d.actual) continue;
-    count++;
-    total += totals(d.actual).work;
-    const identities = new Map();
-    for (const t of d.actual.tasks) {
-      const key = t.taskId || normalize(t.name);
-      if (!identities.has(key)) identities.set(key, []);
-      identities.get(key).push(t);
-    }
-    for (const [key, tasks] of identities) {
-      const n = totals({ tasks, blocks: d.actual.blocks }).work;
-      if (!n) continue;
-      const s = stats.get(key) || { name: tasks[0].name, minutes: 0, days: 0 };
-      s.minutes += n;
-      s.days++;
-      stats.set(key, s);
-    }
-  }
-  return `<h1>Resumen mensual</h1><div class="month-totals"><span>Realizado: <b id="month-actual">${format(total)} hs</b></span><span>Planificado: <b>${format(planned)} hs</b></span><span>Jornadas reconciliadas: <b>${count}</b></span></div><h2>Tareas realizadas</h2><table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${[
-    ...stats.values(),
-  ]
-    .sort((a, b) => b.minutes - a.minutes)
-    .map(
-      (s) =>
-        `<tr><td>${esc(s.name)}</td><td>${s.days}</td><td>${format(s.minutes)} hs</td></tr>`,
-    )
-    .join(
-      "",
-    )}</tbody></table>${stats.size ? "" : '<p class="empty">Sin tareas realizadas.</p>'}<h2>Jornadas</h2><div class="day-list">${days.map(([key, d]) => `<button data-date="${key}"><span>${key}</span><span>Plan: ${format(totals(d.plan).work)} hs</span><span>${d.actual ? `Realizado: ${format(totals(d.actual).work)} hs` : "Sin reconciliar"}</span></button>`).join("")}</div><p class="footnote">Las tareas paralelas conservan su duración individual; el total de jornada no duplica intervalos.</p>`;
-}
 function activeFocus() {
   const now = new Date();
   const current =
@@ -557,7 +545,7 @@ function activeFocus() {
     if (!clock(b.start) || !clock(b.end) || b.refsText) continue;
     const start = minutes(b.start) * 60,
       end = minutes(b.end) * 60;
-    if (start > current || end <= current) continue;
+    if (start > current || end <= start) continue;
     for (const t of resolved(plan, b)) {
       if (b.focusStates?.[t.id]) continue;
       const previous = active.get(t.id);
@@ -619,7 +607,147 @@ function upcomingFocus() {
   return result.sort((a, b) => a.start - b.start);
 }
 function focusMenu(entry, pending = false) {
-  return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div><button data-focus-action="${pending ? "start" : "finish"}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${pending ? "Iniciar tarea" : "Terminar tarea"}</button><button data-focus-action="cancel" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">Cancelar tarea</button></div></details>`;
+  const actions = [
+    ["definition", "Ver definición"],
+    [
+      pending ? "start" : "finish",
+      pending ? "Iniciar tarea" : "Terminar tarea",
+    ],
+    ["postpone", "Posponer tarea"],
+    ["cancel", "Cancelar tarea"],
+  ];
+  return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div>${actions.map(([action, label]) => `<button data-focus-action="${action}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${label}</button>${action === "definition" ? '<hr role="separator">' : ""}`).join("")}</div></details>`;
+}
+function postponeTask(key, blockId, taskId, reconcile = false) {
+  const source = data.days[key]?.plan;
+  const original = source?.blocks.find((item) => item.id === blockId);
+  const originalTask = source?.tasks.find((item) => item.id === taskId);
+  if (!original || !originalTask) return;
+  const length = minutes(originalTask.estimate) || duration(original);
+  const initial = new Date(
+    Math.max(Date.now(), new Date(`${key}T${original.start}:00`).getTime()) +
+      30 * 60000,
+  );
+  if (initial.getHours() * 60 + initial.getMinutes() + length >= 1440) {
+    initial.setDate(initial.getDate() + 1);
+    initial.setHours(9, 0, 0, 0);
+  }
+  const initialDate = `${initial.getFullYear()}-${String(initial.getMonth() + 1).padStart(2, "0")}-${String(initial.getDate()).padStart(2, "0")}`;
+  const dialog = document.createElement("dialog");
+  dialog.className = "task-dialog";
+  dialog.setAttribute("aria-labelledby", "postpone-title");
+  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" type="time" required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p><p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
+  document.body.append(dialog);
+  dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const bounds = dialog.getBoundingClientRect();
+    if (
+      event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom
+    )
+      dialog.close();
+  });
+  dialog.addEventListener(
+    "close",
+    () => setTimeout(() => dialog.remove(), 200),
+    { once: true },
+  );
+  dialog.querySelector("form").onsubmit = (event) => {
+    event.preventDefault();
+    const targetDate = dialog.querySelector('[name="day"]').value;
+    const start = dialog.querySelector('[name="hour"]').value;
+    const scheduled = new Date(`${targetDate}T${start}:00`);
+    const error = dialog.querySelector("[role=alert]");
+    if (
+      !clock(start) ||
+      !Number.isFinite(scheduled.getTime()) ||
+      scheduled <= new Date() ||
+      scheduled <= new Date(`${key}T${original.start}:00`)
+    ) {
+      error.textContent =
+        "Elegí un día y hora posteriores al horario actual de la tarea y al momento presente.";
+      return;
+    }
+    if (!length || minutes(start) + length >= 1440) {
+      error.textContent =
+        "La tarea debe terminar dentro del día elegido. Elegí una hora más temprana.";
+      return;
+    }
+    if (
+      !source.blocks.includes(original) ||
+      !original.taskIds.includes(taskId) ||
+      original.focusStates?.[taskId]
+    ) {
+      error.textContent =
+        "Esta tarea cambió. Cerrá el diálogo y volvé a intentarlo.";
+      return;
+    }
+    checkpoint();
+    if (reconcile) recordFocusWork(key, original, originalTask, original.end);
+    const target = (data.days[targetDate] ||= {
+      plan: newDocument(),
+      actual: null,
+    }).plan;
+    let moved = originalTask;
+    if (target !== source) {
+      moved = {
+        ...structuredClone(originalTask),
+        id: uid(),
+        code: nextCode(target.tasks),
+      };
+      target.tasks.push(moved);
+    }
+    target.blocks.push({
+      ...block(),
+      taskIds: [moved.id],
+      start,
+      end: time(minutes(start) + length),
+      description: moved.name,
+      intentionalRepeat: true,
+    });
+    original.taskIds = original.taskIds.filter((id) => id !== taskId);
+    source.blocks = source.blocks.filter(
+      (item) => item.taskIds.length || item.refsText,
+    );
+    if (
+      target !== source &&
+      !source.blocks.some((item) => item.taskIds.includes(taskId))
+    )
+      source.tasks = source.tasks.filter((item) => item.id !== taskId);
+    syncPlan(source);
+    if (target !== source) syncPlan(target);
+    dialog.close();
+    refreshFocus();
+    save();
+  };
+  dialog.showModal();
+}
+function recordFocusWork(key, b, t, end) {
+  const actual = (data.days[key].actual ||= newDocument());
+  let performed = actual.tasks.find((item) => item.id === t.id);
+  if (!performed) {
+    performed = structuredClone(t);
+    actual.tasks.push(performed);
+  }
+  for (const row of actual.blocks)
+    if (row.id === b.id || row.sourceFocus === `${b.id}/${t.id}`)
+      row.taskIds = row.taskIds.filter((id) => id !== performed.id);
+  actual.blocks = actual.blocks.filter((row) => row.taskIds.length);
+  performed.estimate = time(Math.max(0, minutes(end) - minutes(b.start)));
+  actual.blocks.push({
+    ...block(),
+    taskIds: [performed.id],
+    start: b.start,
+    end,
+    sourceFocus: `${b.id}/${t.id}`,
+    description: performed.name,
+    intentionalRepeat: true,
+  });
+  syncPlan(actual);
+  registerTasks(data, actual);
 }
 function actOnFocus(button) {
   const {
@@ -632,6 +760,29 @@ function actOnFocus(button) {
   const b = source?.blocks.find((b) => b.id === blockId),
     t = source?.tasks.find((t) => t.id === taskId);
   if (!b || !t || b.focusStates?.[taskId]) return;
+  if (action === "definition") {
+    button.closest("details").open = false;
+    date = key;
+    mode = "plan";
+    navigate("day");
+    const focus = () => {
+      focusCell(
+        "tasks",
+        source.tasks.findIndex((item) => item.id === taskId),
+        3,
+      );
+      document.activeElement?.scrollIntoView({ block: "center" });
+    };
+    if (pageTransition) pageTransition.updateCallbackDone.then(focus);
+    else focus();
+    return;
+  }
+  if (action === "postpone" || action === "reschedule") {
+    const menu = button.closest("details");
+    if (menu) menu.open = false;
+    postponeTask(key, blockId, taskId, action === "reschedule");
+    return;
+  }
   const now = new Date(),
     nowMinutes = now.getHours() * 60 + now.getMinutes(),
     nowTime = time(nowMinutes);
@@ -649,30 +800,7 @@ function actOnFocus(button) {
     return;
   checkpoint();
   if (action === "finish") {
-    const d = data.days[key];
-    const actual = (d.actual ||= newDocument());
-    let performed = actual.tasks.find((item) => item.id === t.id);
-    if (!performed) {
-      performed = structuredClone(t);
-      actual.tasks.push(performed);
-    }
-    // Replace this occurrence if reconciliation was already copied from the plan.
-    for (const row of actual.blocks)
-      if (row.id === b.id || row.sourceFocus === `${blockId}/${taskId}`)
-        row.taskIds = row.taskIds.filter((id) => id !== performed.id);
-    actual.blocks = actual.blocks.filter((row) => row.taskIds.length);
-    performed.estimate = time(Math.max(0, nowMinutes - minutes(b.start)));
-    actual.blocks.push({
-      ...block(),
-      taskIds: [performed.id],
-      start: b.start,
-      end: nowTime,
-      sourceFocus: `${blockId}/${taskId}`,
-      description: performed.name,
-      intentionalRepeat: true,
-    });
-    syncPlan(actual);
-    registerTasks(data, actual);
+    recordFocusWork(key, b, t, minutes(b.end) <= nowMinutes ? b.end : nowTime);
     (b.focusStates ||= {})[taskId] = "finished";
   } else if (action === "cancel") {
     (b.focusStates ||= {})[taskId] = "cancelled";
@@ -699,7 +827,8 @@ function actOnFocus(button) {
       });
     }
   }
-  button.closest("details").open = false;
+  const actionMenu = button.closest("details");
+  if (actionMenu) actionMenu.open = false;
   refreshFocus();
   document.querySelector("#focus-content summary")?.focus();
   save();
@@ -713,13 +842,16 @@ function focusHtml() {
       const shared = active.filter(
         (other) => other.start === entry.start && other.end === entry.end,
       );
+      const expired = entry.current >= entry.end;
       const progress =
-        shared.at(-1) === entry
+        !expired && shared.at(-1) === entry
           ? `<div class="focus-progress" role="progressbar" aria-label="Tiempo restante de ${esc(shared.map(({ task }) => task.name || task.code).join(", "))}" aria-valuemin="0" aria-valuemax="100"><div></div></div>`
           : "";
-      const counter = progress
-        ? '<time aria-label="Tiempo restante"></time>'
-        : "";
+      const counter = expired
+        ? `<span class="focus-expired-actions"><button data-focus-action="finish" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Completa</button><span aria-hidden="true">|</span><button data-focus-action="reschedule" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Reprogramar</button></span>`
+        : progress
+          ? '<time aria-label="Tiempo restante"></time>'
+          : "";
       const groupClass =
         shared.length > 1
           ? ` focus-shared${shared[0] === entry ? " focus-shared-first" : ""}${shared.at(-1) === entry ? " focus-shared-last" : ""}`
@@ -731,12 +863,29 @@ function focusHtml() {
     .join("")}${upcoming
     .map((entry) => {
       const { task: t, label, key } = entry;
-      return `<li class="focus-card focus-upcoming" data-entry-key="${esc(key)}"><h2>${esc(t.name || t.code)}</h2><div class="focus-remaining"><time aria-label="Horario previsto">${esc(label)} - ${esc(entry.block.end)}</time>${focusMenu(entry, true)}</div></li>`;
+      return `<li class="focus-card focus-upcoming" data-entry-key="${esc(key)}"><div class="focus-title"><span class="upcoming-priority"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" role="img" aria-label="Prioridad ${normalizePriority(t.priority)}"></span></span><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining"><time aria-label="Horario previsto">${esc(label)} - ${esc(entry.block.end)}</time>${focusMenu(entry, true)}</div></li>`;
     })
     .join(
       "",
     )}${!active.length && !upcoming.length ? '<li data-entry-key="empty" class="focus-empty">No hay actividades planificadas para este momento.</li>' : ""}</ul>`;
 }
+function alignFocusBars() {
+  const scale = window.devicePixelRatio || 1;
+  const positions = [...document.querySelectorAll(".focus-progress")].map(
+    (bar) => {
+      const top =
+        bar.getBoundingClientRect().top - (parseFloat(bar.style.top) || 0);
+      return [bar, Math.round(top * scale) / scale - top];
+    },
+  );
+  for (const [bar, offset] of positions) bar.style.top = `${offset}px`;
+}
+window.addEventListener("resize", () => requestAnimationFrame(alignFocusBars));
+window.addEventListener(
+  "scroll",
+  () => requestAnimationFrame(alignFocusBars),
+  true,
+);
 function refreshFocus() {
   const node = document.getElementById("focus-content");
   if (!node) return;
@@ -763,6 +912,13 @@ function refreshFocus() {
     const el = existing.get(fresh.dataset.entryKey) || fresh;
     if (el !== fresh) {
       el.className = fresh.className;
+      const expiredActions = el.querySelector(".focus-expired-actions");
+      const incomingActions = fresh.querySelector(".focus-expired-actions");
+      if (expiredActions && !incomingActions) expiredActions.remove();
+      else if (!expiredActions && incomingActions)
+        el.querySelector(".focus-remaining").prepend(
+          incomingActions.cloneNode(true),
+        );
       const currentTime = el.querySelector(
         'time[aria-label="Tiempo restante"]',
       );
@@ -788,6 +944,8 @@ function refreshFocus() {
       for (const [selector, attribute] of [
         ["summary", "aria-label"],
         [".focus-priority summary .priority-dot", "class"],
+        [".upcoming-priority .priority-dot", "class"],
+        [".upcoming-priority .priority-dot", "aria-label"],
         ["[data-focus-priority]", "aria-pressed"],
         ["[role='progressbar']", "aria-label"],
       ]) {
@@ -827,6 +985,7 @@ function refreshFocus() {
     progress.setAttribute("aria-valuenow", percent.toFixed(2));
     progress.firstElementChild.style.width = `${percent}%`;
   });
+  requestAnimationFrame(alignFocusBars);
 }
 function reorderFocus(id, target) {
   const order = activeFocus().map((a) => a.task.id),
@@ -850,9 +1009,41 @@ function reorderFocus(id, target) {
 function bindFocus() {
   const node = document.getElementById("focus-content");
   if (!node) return;
+  node.oncontextmenu = (event) => {
+    const row = event.target.closest(".focus-card[data-entry-key]");
+    if (!row) return;
+    event.preventDefault();
+    const menu = row.querySelector(".focus-remaining .focus-menu");
+    document.querySelectorAll(".focus-menu[open]").forEach((other) => {
+      if (other !== menu) other.open = false;
+    });
+    menu.open = true;
+    const panel = menu.querySelector(":scope > div");
+    panel.style.maxHeight = `${Math.max(0, innerHeight - 16)}px`;
+    panel.style.overflowY = "auto";
+    const bounds = panel.getBoundingClientRect();
+    const anchor = menu.getBoundingClientRect();
+    const x = Math.max(
+      8,
+      Math.min(event.clientX, innerWidth - bounds.width - 8),
+    );
+    const y = Math.max(
+      8,
+      Math.min(event.clientY, innerHeight - bounds.height - 8),
+    );
+    panel.style.right = "auto";
+    panel.style.left = `${x - anchor.left}px`;
+    panel.style.top = `${y - anchor.top}px`;
+    menu.querySelector("button")?.focus({ preventScroll: true });
+  };
   autoAnimate(node.querySelector(".focus-list"), { duration: 250 });
   refreshFocus();
   node.onclick = (e) => {
+    const summary = e.target.closest(".focus-menu > summary");
+    if (summary)
+      summary.parentElement
+        .querySelector(":scope > div")
+        .removeAttribute("style");
     const priority = e.target.closest("[data-focus-priority]");
     if (priority) {
       const menu = priority.closest("details");
@@ -883,7 +1074,9 @@ function bindFocus() {
   };
   node.onkeydown = (e) => {
     if (e.key === "Escape") {
-      const menu = e.target.closest(".focus-menu");
+      const menu =
+        e.target.closest(".focus-menu") ||
+        node.querySelector(".focus-menu[open]");
       if (menu) {
         menu.open = false;
         menu.querySelector("summary").focus();
@@ -930,6 +1123,7 @@ function bindFocus() {
 }
 let polling = false;
 const editing = () =>
+  document.querySelector("dialog[open]") ||
   document.activeElement?.matches(
     "input, textarea, select, [contenteditable='true']",
   );
@@ -982,7 +1176,7 @@ function render() {
     if (mode === "plan") deriveEnds(doc());
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-month" class="${view === "month" ? "active" : ""}">Mes</button></nav><div class="dates" ${view === "focus" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" && !d.actual ? '<h1>Realizado</h1><button id="reconcile">Comenzar reconciliación desde el plan</button>' : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : monthly()}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" && !d.actual ? '<h1>Realizado</h1><button id="reconcile">Comenzar reconciliación desde el plan</button>' : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   bind();
   if (view === "day" && doc()) updateView();
   isRendering = false;
@@ -990,6 +1184,21 @@ function render() {
 
 function bind() {
   bindFocus();
+  for (const field of ["from", "to"]) {
+    const input = document.getElementById(`history-${field}`);
+    if (input)
+      input.onchange = () => {
+        historyFilters[field] = input.value;
+        render();
+        document.getElementById(`history-${field}`)?.focus();
+      };
+  }
+  const clearHistory = document.getElementById("history-clear");
+  if (clearHistory)
+    clearHistory.onclick = () => {
+      historyFilters = { from: "", to: "" };
+      render();
+    };
   if (view === "day" && doc() && (doc().tasks.length || doc().blocks.length)) {
     const button = document.createElement("button");
     button.id = "example";
@@ -999,13 +1208,22 @@ function bind() {
   const on = (id, fn) =>
     document.getElementById(id)?.addEventListener("click", fn);
   const changeDate = (value) => {
+    if (value === date) return;
+    document.documentElement.dataset.navigation =
+      value > date ? "forward" : "back";
+    pageTransition?.skipTransition();
     date = value;
     clearSelection();
-    render();
+    if (
+      document.startViewTransition &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      pageTransition = document.startViewTransition(() => render());
+    else render();
   };
   on("nav-day", () => navigate("day"));
   on("nav-focus", () => navigate("focus"));
-  on("nav-month", () => navigate("month"));
+  on("nav-history", () => navigate("month"));
   on("theme", toggleTheme);
   document.querySelector("#date").onchange = (e) => {
     if (e.target.value) changeDate(e.target.value);
@@ -1106,6 +1324,51 @@ function bind() {
   };
 }
 function bindGrids() {
+  document
+    .querySelectorAll(".priority-dots")
+    .forEach((el) =>
+      el
+        .closest("td")
+        .style.setProperty(
+          "--priority-space",
+          `${el.children.length * 15 + 10}px`,
+        ),
+    );
+  const plan = document.querySelector("main");
+  if (plan) {
+    if (plan.priorityToggle)
+      plan.removeEventListener("toggle", plan.priorityToggle, true);
+    plan.addEventListener(
+      "toggle",
+      (plan.priorityToggle = (event) => {
+        const menu = event.target.closest(".plan-priority");
+        if (!menu) return;
+        const panel = menu.querySelector("[popover]");
+        if (menu.open) {
+          const rect = menu.querySelector("summary").getBoundingClientRect();
+          panel.showPopover();
+          panel.style.left = `${Math.min(rect.left, window.innerWidth - panel.offsetWidth - 8)}px`;
+          panel.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - panel.offsetHeight - 8)}px`;
+        } else if (panel.matches(":popover-open")) panel.hidePopover();
+      }),
+      true,
+    );
+    plan.onclick = (event) => {
+      const button = event.target.closest("[data-plan-priority]");
+      if (!button) return;
+      const t = doc().tasks.find((item) => item.id === button.dataset.taskId);
+      if (!t) return;
+      checkpoint();
+      const originTable = button.closest("table");
+      t.priority = button.dataset.planPriority;
+      button.closest("details").open = false;
+      updateView();
+      save();
+      originTable
+        .querySelector(`[data-priority-id="${t.id}"] summary`)
+        ?.focus();
+    };
+  }
   document.querySelectorAll("[data-grid]").forEach((el) => {
     const grid = el.dataset.grid,
       i = +el.dataset.row,
@@ -1310,11 +1573,11 @@ function gridKey(e) {
   }
   if (["Home", "End"].includes(e.key) && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
-    const column = e.key === "Home" ? 0 : 3;
+    const column = e.key === "Home" ? columnOrder(grid)[0] : 3;
     focusCell(grid, i, column);
     const input = document.activeElement,
       position = e.key === "Home" ? 0 : input.value.length;
-    input.setSelectionRange(position, position);
+    if (input.setSelectionRange) input.setSelectionRange(position, position);
     if (e.shiftKey) select(grid, i);
     return;
   }
@@ -1356,29 +1619,39 @@ function gridKey(e) {
   }
   if (
     !e.shiftKey &&
-    ((e.key === "ArrowLeft" && e.target.selectionStart === 0) ||
+    ((e.key === "ArrowLeft" &&
+      (e.target.tagName === "SUMMARY" || e.target.selectionStart === 0)) ||
       (e.key === "ArrowRight" &&
-        e.target.selectionStart === e.target.value.length))
+        (e.target.tagName === "SUMMARY" ||
+          e.target.selectionStart === e.target.value?.length)))
   ) {
     e.preventDefault();
     focusCell(
       grid,
       i,
-      Math.max(0, Math.min(3, c + (e.key === "ArrowRight" ? 1 : -1))),
+      columnOrder(grid)[
+        Math.max(
+          0,
+          Math.min(
+            3,
+            columnOrder(grid).indexOf(c) + (e.key === "ArrowRight" ? 1 : -1),
+          ),
+        )
+      ],
     );
   }
   if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
-    if (e.target.tagName === "SELECT") return;
+    if (e.target.tagName === "SELECT" || e.target.tagName === "SUMMARY") return;
     e.preventDefault();
     if (i === rows(grid).length - 1) add(grid);
     else focusCell(grid, i + 1, c);
   }
   if (e.key === "Tab") {
-    const next = i * 4 + c + (e.shiftKey ? -1 : 1);
+    const next = i * 4 + columnOrder(grid).indexOf(c) + (e.shiftKey ? -1 : 1);
     if (next < 0) return;
     e.preventDefault();
     if (next >= rows(grid).length * 4) add(grid);
-    else focusCell(grid, Math.floor(next / 4), next % 4);
+    else focusCell(grid, Math.floor(next / 4), columnOrder(grid)[next % 4]);
   }
 }
 function importDefinitions(incoming) {
@@ -1425,6 +1698,10 @@ document.addEventListener("keydown", (e) => {
     deleteRows();
   }
   if (e.key === "Escape") {
+    document.querySelectorAll(".plan-priority[open]").forEach((menu) => {
+      menu.open = false;
+      menu.querySelector("summary").focus();
+    });
     closeSuggestions();
     clearSelection();
   }

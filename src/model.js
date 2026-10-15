@@ -179,7 +179,7 @@ export function example() {
     ["2:30", "(P1)", "Avanzar con la matriz de casos"],
     ["2:30", "(P1)", "Preparar modelo de dominio para casos de ejemplo"],
     ["1:30", "", "Escribir reglas a mano 1:30hs mínimo"],
-    ["0:30", "", "Descanso de media hora"],
+    ["0:30", "", "Descanso"],
   ].map(([estimate, priority, name], i) => ({
     ...task([]),
     code: `t${i + 1}`,
