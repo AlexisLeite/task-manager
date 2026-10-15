@@ -118,6 +118,7 @@
   white-space: nowrap;
 }
 .history-task-track > span {
+  position: relative;
   display: block;
   height: 4px;
   background: var(--accent);

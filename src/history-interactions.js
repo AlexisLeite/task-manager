@@ -1,4 +1,5 @@
 import autoAnimate from "@formkit/auto-animate";
+import { alignHistoryPixels } from './chart-pixels.js';
 import { historyMatches, historyHtml, projectFilterLabel } from "./history.js";
 
 const transitions = new WeakMap();
@@ -32,6 +33,7 @@ function reveal(element, visible) {
 }
 
 export function bindHistoryControls(filters, data, openDay) {
+  alignHistoryPixels();
   const filterToggle = document.getElementById("history-filter-toggle");
   if (!filterToggle) return;
   filterToggle.onclick = () => {

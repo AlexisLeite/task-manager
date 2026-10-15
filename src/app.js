@@ -859,6 +859,8 @@ function recordFocusWork(key, b, t, end) {
     performed = structuredClone(t);
     actual.tasks.push(performed);
   }
+  performed.projectId = t.projectId || "";
+  performed.name = t.name;
   for (const row of actual.blocks)
     if (row.id === b.id || row.sourceFocus === `${b.id}/${t.id}`)
       row.taskIds = row.taskIds.filter((id) => id !== performed.id);
