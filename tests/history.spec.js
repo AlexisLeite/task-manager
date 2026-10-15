@@ -283,6 +283,57 @@ test("filtros plegados y lupa con búsqueda aproximada independiente de los tota
   expect(
     animations.filter((a) => a.id === "history-date-filters"),
   ).toHaveLength(2);
-  expect(animations.filter((a) => a.id === "history-search")).toHaveLength(2);
+  expect(
+    animations.filter((a) => a.id === "history-search-panel"),
+  ).toHaveLength(2);
   expect(animations.some((a) => a.tag === "TR")).toBe(true);
+});
+
+test("el acordeón desplaza el contenido sin comprimir ni desvanecer los campos", async ({
+  page,
+}) => {
+  const plan = example();
+  await page.addInitScript(
+    (data) => localStorage.setItem("jornada.v1", JSON.stringify(data)),
+    { version: 2, tasks: [], days: { "2026-10-15": { plan, actual: plan } } },
+  );
+  await page.goto("/#/historia");
+  for (const [toggleId, panelId, following] of [
+    ["history-filter-toggle", "history-date-filters", ".history-charts"],
+    ["history-search-toggle", "history-search-panel", ".report"],
+  ]) {
+    const geometry = await page.evaluate(
+      ({ toggleId, panelId, following }) => {
+        const panel = document.getElementById(panelId);
+        const next = document.querySelector(following);
+        const top = next.getBoundingClientRect().top;
+        document.getElementById(toggleId).click();
+        const animation = panel.getAnimations()[0];
+        animation.pause();
+        animation.currentTime = 0;
+        const input = panel.querySelector("input");
+        const inputHeight = input.getBoundingClientRect().height;
+        animation.currentTime = 140;
+        const result = {
+          height: panel.getBoundingClientRect().height,
+          end: parseFloat(animation.effect.getKeyframes().at(-1).height),
+          displacement: next.getBoundingClientRect().top - top,
+          inputHeight,
+          midwayInputHeight: input.getBoundingClientRect().height,
+          opacity: getComputedStyle(panel).opacity,
+        };
+        animation.finish();
+        return result;
+      },
+      { toggleId, panelId, following },
+    );
+    expect(geometry.height).toBeGreaterThan(0);
+    expect(geometry.height).toBeLessThan(geometry.end);
+    expect(geometry.displacement).toBeCloseTo(geometry.height, 0);
+    expect(geometry.inputHeight).toBe(geometry.midwayInputHeight);
+    expect(geometry.opacity).toBe("1");
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.locator("#history-filter-toggle").click();
+  await expect(page.locator("#history-date-filters")).toBeHidden();
 });

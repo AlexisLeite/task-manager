@@ -176,16 +176,16 @@ export function historyHtml(data, filters = {}) {
   const history = buildHistory(data, filters);
   return `<div class="history-view">
     <div class="history-header"><div class="history-totals"><span><b id="history-actual">${format(history.totalMinutes)} hs</b> realizadas</span><span><b id="history-days">${history.dayCount}</b> ${history.dayCount === 1 ? "jornada" : "jornadas"}</span></div><button id="history-filter-toggle" aria-expanded="${!!filters.showDates}" aria-controls="history-date-filters">Filtros${history.from || history.to ? " •" : ""}</button></div>
-    <div id="history-date-filters" class="history-filters" ${filters.showDates ? "" : "hidden"}>
+    <div id="history-date-filters" class="history-accordion" ${filters.showDates ? "" : "hidden"}><div class="history-filters">
       <label for="history-from">Desde <input type="date" id="history-from" aria-label="Desde" value="${escapeHtml(history.from)}"></label>
       <label for="history-to">Hasta <input type="date" id="history-to" aria-label="Hasta" value="${escapeHtml(history.to)}"></label>
       <button id="history-clear">Todo el historial</button>
-    </div>
+    </div></div>
     ${history.error ? `<p class="history-error" role="alert">${escapeHtml(history.error)}</p>` : ""}
 
     ${history.days.length ? `<div class="history-charts">${dailyChart(history)}${taskChart(history)}</div>` : ""}
-    <div class="history-section-header"><h2>Tareas realizadas</h2><button id="history-search-toggle" aria-label="Buscar tareas realizadas" aria-expanded="${!!filters.searchOpen}" aria-controls="history-search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div>
-    <input id="history-search" type="search" aria-label="Buscar tareas por nombre" placeholder="Buscar tareas…" value="${escapeHtml(filters.query || "")}" ${filters.searchOpen ? "" : "hidden"}>
+    <div class="history-section-header"><h2>Tareas realizadas</h2><button id="history-search-toggle" aria-label="Buscar tareas realizadas" aria-expanded="${!!filters.searchOpen}" aria-controls="history-search-panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div>
+    <div id="history-search-panel" class="history-accordion" ${filters.searchOpen ? "" : "hidden"}><div class="history-search-inner"><input id="history-search" type="search" aria-label="Buscar tareas por nombre" placeholder="Buscar tareas…" value="${escapeHtml(filters.query || "")}"></div></div>
     <p id="history-search-empty" class="empty" ${history.tasks.length && !history.tasks.some((task) => historyMatches(task.name, filters.query)) ? "" : "hidden"}>No hay tareas que coincidan con la búsqueda.</p>
     <table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${history.tasks.map((task) => `<tr data-history-task="${escapeHtml(task.id)}" ${historyMatches(task.name, filters.query) ? "" : "hidden"}><td>${escapeHtml(task.name)}</td><td>${task.days}</td><td>${format(task.minutes)} hs</td></tr>`).join("")}</tbody></table>
     ${!history.tasks.length && !history.error ? '<p class="empty">Sin trabajo realizado en este período.</p>' : ""}

@@ -6,13 +6,9 @@ const transitions = new WeakMap();
 function reveal(element, visible) {
   const previous = transitions.get(element);
   if (!previous && element.hidden === !visible) return;
-  const before = getComputedStyle(element);
-  const start = {
-    height: `${element.getBoundingClientRect().height}px`,
-    opacity: element.hidden ? 0 : before.opacity,
-    marginTop: element.hidden ? "0px" : before.marginTop,
-    marginBottom: element.hidden ? "0px" : before.marginBottom,
-  };
+  const startHeight = element.hidden
+    ? 0
+    : element.getBoundingClientRect().height;
   previous?.cancel();
   element.hidden = false;
   element.inert = !visible;
@@ -21,17 +17,13 @@ function reveal(element, visible) {
     transitions.delete(element);
     return;
   }
-  const natural = getComputedStyle(element);
-  const end = {
-    height: visible ? `${element.getBoundingClientRect().height}px` : "0px",
-    opacity: visible ? 1 : 0,
-    marginTop: visible ? natural.marginTop : "0px",
-    marginBottom: visible ? natural.marginBottom : "0px",
-  };
-  const animation = element.animate([start, end], {
-    duration: 200,
-    easing: "ease-out",
-  });
+  // Only the outer panel changes height. Its contents keep their natural size
+  // and are progressively revealed, while the following sections move with it.
+  const endHeight = visible ? element.getBoundingClientRect().height : 0;
+  const animation = element.animate(
+    [{ height: `${startHeight}px` }, { height: `${endHeight}px` }],
+    { duration: 280, easing: "cubic-bezier(.4, 0, .2, 1)" },
+  );
   transitions.set(element, animation);
   animation.onfinish = () => {
     element.hidden = !visible;
@@ -49,6 +41,7 @@ export function bindHistoryControls(filters) {
   };
   const searchToggle = document.getElementById("history-search-toggle");
   const searchInput = document.getElementById("history-search");
+  const searchPanel = document.getElementById("history-search-panel");
   const body = document.querySelector(".history-view .report tbody");
   const rows = [...body.children];
   const empty = document.getElementById("history-search-empty");
@@ -73,14 +66,14 @@ export function bindHistoryControls(filters) {
       return visibleRows.get(id);
     });
     body.replaceChildren(...displayed);
-    reveal(empty, rows.length > 0 && matches.length === 0);
+    empty.hidden = !rows.length || matches.length > 0;
   };
   searchInput.oninput = applySearch;
   searchToggle.onclick = () => {
     filters.searchOpen = !filters.searchOpen;
-    reveal(searchInput, filters.searchOpen);
+    reveal(searchPanel, filters.searchOpen);
     searchToggle.setAttribute("aria-expanded", String(filters.searchOpen));
-    if (filters.searchOpen) searchInput.focus();
+    if (filters.searchOpen) searchInput.focus({ preventScroll: true });
     else {
       searchInput.value = "";
       applySearch();

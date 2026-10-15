@@ -202,19 +202,22 @@
   width: min(360px, 100%);
   font-size: 12px;
   padding: 8px;
-  margin-bottom: 16px;
+  margin: 0;
   border-bottom: 1px solid var(--line);
 }
 .history-filters {
-  margin: -24px 0 44px;
+  margin: 0;
+  padding-bottom: 24px;
   justify-content: flex-end;
 }
 .history-view [hidden] {
   display: none !important;
 }
 
-#history-date-filters,
-#history-search,
-#history-search-empty {
-  overflow: clip;
+.history-accordion {
+  overflow: hidden;
+  display: flow-root;
+}
+.history-search-inner {
+  padding-bottom: 16px;
 }
