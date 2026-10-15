@@ -1,7 +1,8 @@
 import "./history.css";
 import autoAnimate from "@formkit/auto-animate";
 import "./style.css";
-import { historyHtml, historyMatches } from "./history.js";
+import { historyHtml } from "./history.js";
+import { bindHistoryControls } from "./history-interactions.js";
 import { Repository, LocalStorageAdapter, BackendAdapter } from "./storage.js";
 import {
   uid,
@@ -1284,54 +1285,7 @@ function bind() {
         document.getElementById(`history-${field}`)?.focus();
       };
   }
-  const filterToggle = document.getElementById("history-filter-toggle");
-  if (filterToggle)
-    filterToggle.onclick = () => {
-      historyFilters.showDates = !historyFilters.showDates;
-      document.getElementById("history-date-filters").hidden =
-        !historyFilters.showDates;
-      filterToggle.setAttribute(
-        "aria-expanded",
-        String(historyFilters.showDates),
-      );
-    };
-  const searchToggle = document.getElementById("history-search-toggle");
-  const searchInput = document.getElementById("history-search");
-  if (searchInput) {
-    const applySearch = () => {
-      historyFilters.query = searchInput.value;
-      const rows = [...document.querySelectorAll("[data-history-task]")];
-      rows.forEach(
-        (row) =>
-          (row.hidden = !historyMatches(
-            row.cells[0].textContent,
-            searchInput.value,
-          )),
-      );
-      document.getElementById("history-search-empty").hidden =
-        !rows.length || rows.some((row) => !row.hidden);
-    };
-    searchInput.oninput = applySearch;
-    searchToggle.onclick = () => {
-      historyFilters.searchOpen = !historyFilters.searchOpen;
-      searchInput.hidden = !historyFilters.searchOpen;
-      searchToggle.setAttribute(
-        "aria-expanded",
-        String(historyFilters.searchOpen),
-      );
-      if (historyFilters.searchOpen) searchInput.focus();
-      else {
-        searchInput.value = "";
-        applySearch();
-      }
-    };
-    searchInput.onkeydown = (event) => {
-      if (event.key === "Escape") {
-        searchToggle.click();
-        searchToggle.focus();
-      }
-    };
-  }
+  bindHistoryControls(historyFilters);
   const clearHistory = document.getElementById("history-clear");
   if (clearHistory)
     clearHistory.onclick = () => {

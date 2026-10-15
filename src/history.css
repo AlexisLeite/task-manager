@@ -212,3 +212,9 @@
 .history-view [hidden] {
   display: none !important;
 }
+
+#history-date-filters,
+#history-search,
+#history-search-empty {
+  overflow: clip;
+}

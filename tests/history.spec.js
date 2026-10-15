@@ -240,6 +240,20 @@ test("filtros plegados y lupa con búsqueda aproximada independiente de los tota
     { version: 2, tasks: [], days: { "2026-10-15": { plan, actual: plan } } },
   );
   await page.goto("/#/historia");
+  await page.evaluate(() => {
+    window.historyAnimations = [];
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (frames, options) {
+      if (this.closest(".history-view"))
+        window.historyAnimations.push({
+          id: this.id,
+          tag: this.tagName,
+          frames,
+        });
+      return animate.call(this, frames, options);
+    };
+  });
+
   await expect(page.getByLabel("Desde", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "Filtros", exact: true }).click();
   await page.getByLabel("Desde", { exact: true }).fill("2026-10-15");
@@ -265,4 +279,10 @@ test("filtros plegados y lupa con búsqueda aproximada independiente de los tota
   await search.press("Escape");
   await expect(search).toBeHidden();
   await expect(page.locator("[data-history-task]:visible")).toHaveCount(5);
+  const animations = await page.evaluate(() => window.historyAnimations);
+  expect(
+    animations.filter((a) => a.id === "history-date-filters"),
+  ).toHaveLength(2);
+  expect(animations.filter((a) => a.id === "history-search")).toHaveLength(2);
+  expect(animations.some((a) => a.tag === "TR")).toBe(true);
 });
