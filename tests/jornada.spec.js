@@ -360,6 +360,7 @@ test("resumen mensual agrupa identidades, no duplica paralelos y separa meses", 
   await expect(
     page.getByRole("row").filter({ hasText: "Avanzar con la matriz de casos" }),
   ).toContainText("2:30 hs");
+  await page.getByRole("button", { name: "Filtros", exact: true }).click();
   await page.getByLabel("Desde", { exact: true }).fill("2026-11-01");
   await expect(page.locator("#history-actual")).toHaveText("0:00 hs");
   await page.getByRole("button", { name: "Todo el historial" }).click();
@@ -872,9 +873,7 @@ test("Foco muestra actividades actuales en paralelo y actualiza el tiempo restan
       ".focus-list [data-focus-id]:not(:has(.focus-expired-actions))",
     ),
   ).toHaveCount(1);
-  await expect(page.locator(".focus-list")).toContainText(
-    "Descanso",
-  );
+  await expect(page.locator(".focus-list")).toContainText("Descanso");
   await expect(
     page.locator(
       ".focus-list [data-focus-id]:not(:has(.focus-expired-actions)) time",

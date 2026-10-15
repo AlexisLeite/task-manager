@@ -1,7 +1,7 @@
 import "./history.css";
 import autoAnimate from "@formkit/auto-animate";
 import "./style.css";
-import { historyHtml } from "./history.js";
+import { historyHtml, historyMatches } from "./history.js";
 import { Repository, LocalStorageAdapter, BackendAdapter } from "./storage.js";
 import {
   uid,
@@ -613,10 +613,95 @@ function focusMenu(entry, pending = false) {
       pending ? "start" : "finish",
       pending ? "Iniciar tarea" : "Terminar tarea",
     ],
+    ...(!pending ? [["extend", "Extender tarea"]] : []),
     ["postpone", "Posponer tarea"],
     ["cancel", "Cancelar tarea"],
   ];
   return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div>${actions.map(([action, label]) => `<button data-focus-action="${action}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${label}</button>${action === "definition" ? '<hr role="separator">' : ""}`).join("")}</div></details>`;
+}
+function extendTask(key, blockId, taskId, choose = false) {
+  const plan = data.days[key]?.plan;
+  const row = plan?.blocks.find((item) => item.id === blockId);
+  const task = plan?.tasks.find((item) => item.id === taskId);
+  if (!row || !task) return;
+  const dialog = document.createElement("dialog");
+  dialog.className = "task-dialog";
+  dialog.setAttribute(
+    "aria-label",
+    choose ? "Continuar tarea" : "Extender tarea",
+  );
+  const showExtension = () => {
+    const now = new Date();
+    const suggested = time(
+      Math.min(
+        1439,
+        Math.max(minutes(row.end), now.getHours() * 60 + now.getMinutes()) + 30,
+      ),
+    );
+    dialog.innerHTML = `<form><h2>Extender tarea</h2><p>${esc(task.name || task.code)}</p><label>Hora de finalización<input name="end" type="text" inputmode="numeric" maxlength="5" pattern="[0-2][0-9]:[0-5][0-9]" placeholder="hh:mm" required value="${suggested}"></label><p role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">Extender</button></div></form>`;
+    dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
+    dialog.querySelector("form").onsubmit = (event) => {
+      event.preventDefault();
+      const end = dialog.querySelector("input").value;
+      if (
+        !clock(end) ||
+        minutes(end) <= minutes(row.end) ||
+        new Date(`${key}T${end}:00`) <= new Date()
+      ) {
+        dialog.querySelector("[role=alert]").textContent =
+          "Elegí una hora hh:mm posterior al fin previsto y al momento actual.";
+        return;
+      }
+      if (!plan.blocks.includes(row) || row.focusStates?.[taskId]) {
+        dialog.querySelector("[role=alert]").textContent =
+          "La tarea cambió. Cerrá el diálogo y volvé a intentarlo.";
+        return;
+      }
+      checkpoint();
+      if (row.taskIds.length > 1) {
+        row.taskIds = row.taskIds.filter((id) => id !== taskId);
+        plan.blocks.push({
+          ...structuredClone(row),
+          id: uid(),
+          taskIds: [taskId],
+          end,
+          intentionalRepeat: true,
+        });
+      } else row.end = end;
+      task.estimate = time(minutes(end) - minutes(row.start));
+      dialog.close();
+      refreshFocus();
+      save();
+    };
+    dialog.querySelector("input").focus();
+    dialog.querySelector("input").select();
+  };
+  if (choose) {
+    dialog.innerHTML = `<h2>Continuar tarea</h2><p>${esc(task.name || task.code)}</p><div class="dialog-actions"><button data-extend>Extender tarea</button><button data-reschedule>Reprogramar tarea</button></div>`;
+    dialog.querySelector("[data-extend]").onclick = showExtension;
+    dialog.querySelector("[data-reschedule]").onclick = () => {
+      dialog.close();
+      postponeTask(key, blockId, taskId, true);
+    };
+  } else showExtension();
+  dialog.addEventListener("click", (event) => {
+    if (event.target !== dialog) return;
+    const bounds = dialog.getBoundingClientRect();
+    if (
+      event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom
+    )
+      dialog.close();
+  });
+  dialog.addEventListener(
+    "close",
+    () => setTimeout(() => dialog.remove(), 200),
+    { once: true },
+  );
+  document.body.append(dialog);
+  dialog.showModal();
 }
 function postponeTask(key, blockId, taskId, reconcile = false) {
   const source = data.days[key]?.plan;
@@ -777,6 +862,12 @@ function actOnFocus(button) {
     else focus();
     return;
   }
+  if (action === "extend" || action === "continue") {
+    const menu = button.closest("details");
+    if (menu) menu.open = false;
+    extendTask(key, blockId, taskId, action === "continue");
+    return;
+  }
   if (action === "postpone" || action === "reschedule") {
     const menu = button.closest("details");
     if (menu) menu.open = false;
@@ -848,7 +939,7 @@ function focusHtml() {
           ? `<div class="focus-progress" role="progressbar" aria-label="Tiempo restante de ${esc(shared.map(({ task }) => task.name || task.code).join(", "))}" aria-valuemin="0" aria-valuemax="100"><div></div></div>`
           : "";
       const counter = expired
-        ? `<span class="focus-expired-actions"><button data-focus-action="finish" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Completa</button><span aria-hidden="true">|</span><button data-focus-action="reschedule" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Reprogramar</button></span>`
+        ? `<span class="focus-expired-actions"><button data-focus-action="finish" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Completa</button><span aria-hidden="true">|</span><button data-focus-action="continue" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Continuar</button></span>`
         : progress
           ? '<time aria-label="Tiempo restante"></time>'
           : "";
@@ -1193,10 +1284,58 @@ function bind() {
         document.getElementById(`history-${field}`)?.focus();
       };
   }
+  const filterToggle = document.getElementById("history-filter-toggle");
+  if (filterToggle)
+    filterToggle.onclick = () => {
+      historyFilters.showDates = !historyFilters.showDates;
+      document.getElementById("history-date-filters").hidden =
+        !historyFilters.showDates;
+      filterToggle.setAttribute(
+        "aria-expanded",
+        String(historyFilters.showDates),
+      );
+    };
+  const searchToggle = document.getElementById("history-search-toggle");
+  const searchInput = document.getElementById("history-search");
+  if (searchInput) {
+    const applySearch = () => {
+      historyFilters.query = searchInput.value;
+      const rows = [...document.querySelectorAll("[data-history-task]")];
+      rows.forEach(
+        (row) =>
+          (row.hidden = !historyMatches(
+            row.cells[0].textContent,
+            searchInput.value,
+          )),
+      );
+      document.getElementById("history-search-empty").hidden =
+        !rows.length || rows.some((row) => !row.hidden);
+    };
+    searchInput.oninput = applySearch;
+    searchToggle.onclick = () => {
+      historyFilters.searchOpen = !historyFilters.searchOpen;
+      searchInput.hidden = !historyFilters.searchOpen;
+      searchToggle.setAttribute(
+        "aria-expanded",
+        String(historyFilters.searchOpen),
+      );
+      if (historyFilters.searchOpen) searchInput.focus();
+      else {
+        searchInput.value = "";
+        applySearch();
+      }
+    };
+    searchInput.onkeydown = (event) => {
+      if (event.key === "Escape") {
+        searchToggle.click();
+        searchToggle.focus();
+      }
+    };
+  }
   const clearHistory = document.getElementById("history-clear");
   if (clearHistory)
     clearHistory.onclick = () => {
-      historyFilters = { from: "", to: "" };
+      historyFilters = { ...historyFilters, from: "", to: "" };
       render();
     };
   if (view === "day" && doc() && (doc().tasks.length || doc().blocks.length)) {

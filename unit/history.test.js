@@ -220,7 +220,7 @@ test("gráficas usan el mismo rango y minutos que el resumen, con fechas cronol�
 test("sin datos o rango inválido no produce gráficas vacías ni escalas inválidas", () => {
   for (const filters of [{}, { from: "2026-10-31", to: "2026-10-01" }]) {
     const html = historyHtml({ days: {} }, filters);
-    assert.ok(!html.includes("<svg"));
+    assert.ok(!html.includes('class="history-charts"'));
     assert.ok(!html.includes("NaN"));
     assert.ok(!html.includes("Infinity"));
   }
@@ -249,4 +249,14 @@ test("Historia refleja renombres de definiciones actuales aunque se filtre una j
   const html = historyHtml(data, { from: "2026-10-14", to: "2026-10-14" });
   assert.ok(html.includes("Descanso"));
   assert.ok(!html.includes("Descanso media hora"));
+});
+
+test("búsqueda aproximada ignora tildes y admite errores y abreviaturas", async () => {
+  const { historyMatches } = await import("../src/history.js");
+  assert.ok(historyMatches("Definición de la matriz", "definicion matrzi"));
+  assert.ok(historyMatches("Preparar modelo de dominio", "prep mdl"));
+  assert.ok(historyMatches("Preparar modelo de dominio", "domino"));
+  assert.ok(historyMatches("Descanso", ""));
+  assert.ok(!historyMatches("Descanso", "matriz"));
+  assert.ok(!historyMatches("Matriz", "ma descanso"));
 });

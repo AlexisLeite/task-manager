@@ -53,6 +53,7 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   await expect(
     page.locator("#history-task-chart [data-history-task-bar]"),
   ).toHaveCount(1);
+  await page.getByRole("button", { name: "Filtros", exact: true }).click();
   await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
   await page.getByLabel("Hasta", { exact: true }).fill("2026-10-01");
   await expect(page.locator("#history-actual")).toHaveText("2:00 hs");
@@ -163,7 +164,10 @@ test("una tarea vencida permanece y permite completar o reprogramar conservando 
     "",
   );
   await page.keyboard.press("Escape");
-  await row.getByRole("button", { name: "Reprogramar", exact: true }).click();
+  await row.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Reprogramar tarea", exact: true })
+    .click();
   await page.getByLabel("Día", { exact: true }).fill("2026-10-15");
   await page.getByLabel("Hora", { exact: true }).fill("14:00");
   await page
@@ -212,19 +216,53 @@ test("Historia mantiene cinco tareas sin scroll vertical y usa todo el ancho de 
     page.getByRole("heading", { name: "Historia", exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".history-task-bar")).toHaveCount(5);
-  const layout = await page
-    .locator("#history-task-chart")
-    .evaluate((el) => ({
-      height: el.clientHeight,
-      scrollHeight: el.scrollHeight,
-      width: el.clientWidth,
-      rowWidth: el.querySelector(".history-task-bar").getBoundingClientRect()
-        .width,
-    }));
+  const layout = await page.locator("#history-task-chart").evaluate((el) => ({
+    height: el.clientHeight,
+    scrollHeight: el.scrollHeight,
+    width: el.clientWidth,
+    rowWidth: el.querySelector(".history-task-bar").getBoundingClientRect()
+      .width,
+  }));
   expect(layout.scrollHeight).toBeLessThanOrEqual(layout.height);
   expect(layout.rowWidth).toBeGreaterThan(layout.width * 0.95);
   await page.screenshot({
     path: testInfo.outputPath("historia-five-tasks.png"),
     fullPage: true,
   });
+});
+
+test("filtros plegados y lupa con búsqueda aproximada independiente de los totales", async ({
+  page,
+}) => {
+  const plan = example();
+  await page.addInitScript(
+    (data) => localStorage.setItem("jornada.v1", JSON.stringify(data)),
+    { version: 2, tasks: [], days: { "2026-10-15": { plan, actual: plan } } },
+  );
+  await page.goto("/#/historia");
+  await expect(page.getByLabel("Desde", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "Filtros", exact: true }).click();
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-15");
+  await expect(page.getByLabel("Hasta", { exact: true })).toBeVisible();
+  await page.locator("#history-filter-toggle").click();
+  await expect(page.getByLabel("Desde", { exact: true })).toBeHidden();
+  await page
+    .getByRole("button", { name: "Buscar tareas realizadas", exact: true })
+    .click();
+  const search = page.getByRole("searchbox", {
+    name: "Buscar tareas por nombre",
+  });
+  await expect(search).toBeFocused();
+  await search.fill("matrzi");
+  await expect(page.locator("[data-history-task]:visible")).toHaveCount(1);
+  await expect(page.locator("[data-history-task]:visible")).toContainText(
+    "matriz",
+  );
+  await expect(page.locator("#history-actual")).toHaveText("6:30 hs");
+  await expect(page.locator(".history-task-bar")).toHaveCount(5);
+  await search.fill("zzzzzz");
+  await expect(page.locator("#history-search-empty")).toBeVisible();
+  await search.press("Escape");
+  await expect(search).toBeHidden();
+  await expect(page.locator("[data-history-task]:visible")).toHaveCount(5);
 });
