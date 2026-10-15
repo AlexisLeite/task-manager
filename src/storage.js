@@ -5,6 +5,7 @@ export class LocalStorageAdapter {
   }
   async load() {
     const raw = localStorage.getItem(this.key);
+    this.revision = raw;
     if (!raw) return { version: 2, days: {}, tasks: [] };
     const data = JSON.parse(raw);
     if (
@@ -29,6 +30,56 @@ export class LocalStorageAdapter {
       localStorage.setItem("jornada.backup.v1", previous);
     }
     localStorage.setItem(this.key, JSON.stringify(data));
+    this.revision = JSON.stringify(data);
+  }
+  async poll() {
+    const raw = localStorage.getItem(this.key);
+    return raw && raw !== this.revision
+      ? { data: JSON.parse(raw), revision: raw }
+      : null;
+  }
+}
+export class BackendAdapter {
+  constructor(url = "/api/workspace") {
+    this.url = url;
+    this.revision = null;
+  }
+  async load() {
+    const response = await fetch(this.url, { cache: "no-store" });
+    if (!response.ok) throw Error("No se pudo conectar con el servidor.");
+    const data = await response.json();
+    this.revision = response.headers.get("ETag");
+    return data;
+  }
+  async save(data) {
+    if (!this.revision)
+      throw Error("Primero se deben cargar los datos del servidor.");
+    const response = await fetch(this.url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "If-Match": this.revision,
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw Error(body.error || "No se pudo guardar en el servidor.");
+    }
+    this.revision = response.headers.get("ETag");
+  }
+  async poll() {
+    const response = await fetch(this.url, {
+      cache: "no-store",
+      headers: { "If-None-Match": this.revision },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (response.status === 304) return null;
+    if (!response.ok) throw Error("No se pudo consultar el servidor.");
+    return {
+      data: await response.json(),
+      revision: response.headers.get("ETag"),
+    };
   }
 }
 export class Repository {

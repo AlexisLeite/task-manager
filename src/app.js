@@ -1,6 +1,6 @@
 import autoAnimate from "@formkit/auto-animate";
 import "./style.css";
-import { Repository, LocalStorageAdapter } from "./storage.js";
+import { Repository, LocalStorageAdapter, BackendAdapter } from "./storage.js";
 import {
   uid,
   normalize,
@@ -26,7 +26,10 @@ import {
   parseTimeInput,
 } from "./model.js";
 
-const repo = new Repository(new LocalStorageAdapter());
+const localMode = import.meta.env.VITE_STORAGE === "local";
+const repo = new Repository(
+  localMode ? new LocalStorageAdapter() : new BackendAdapter(),
+);
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -111,9 +114,13 @@ async function save() {
   try {
     await repo.save(data);
     if (rev === revision) setStatus("Guardado");
-  } catch {
+  } catch (error) {
     setStatus("No se pudo guardar");
-    notice("No se pudo guardar. Exportá una copia antes de cerrar.");
+    notice(
+      localMode
+        ? "No se pudo guardar. Exportá una copia antes de cerrar."
+        : `${error.message} Exportá una copia antes de cerrar.`,
+    );
   }
 }
 function focusCell(grid, i, c = 0) {
@@ -732,6 +739,31 @@ function refreshFocus() {
   let previous = null;
   for (const fresh of desired) {
     const el = existing.get(fresh.dataset.entryKey) || fresh;
+    if (el !== fresh) {
+      for (const selector of ["h2", ".focus-upcoming time"]) {
+        const current = el.querySelector(selector);
+        const incoming = fresh.querySelector(selector);
+        if (current && incoming && current.textContent !== incoming.textContent)
+          current.textContent = incoming.textContent;
+      }
+      for (const [selector, attribute] of [
+        ["summary", "aria-label"],
+        [".focus-priority summary .priority-dot", "class"],
+        ["[data-focus-priority]", "aria-pressed"],
+        ["[role='progressbar']", "aria-label"],
+      ]) {
+        const incoming = fresh.querySelectorAll(selector);
+        el.querySelectorAll(selector).forEach((element, index) => {
+          const value = incoming[index]?.getAttribute(attribute);
+          if (
+            value !== null &&
+            value !== undefined &&
+            element.getAttribute(attribute) !== value
+          )
+            element.setAttribute(attribute, value);
+        });
+      }
+    }
     const next = previous
       ? previous.nextElementSibling
       : list.firstElementChild;
@@ -854,8 +886,44 @@ function bindFocus() {
     dragged = null;
   };
 }
-setInterval(refreshFocus, 1000);
-document.addEventListener("visibilitychange", refreshFocus);
+let polling = false;
+const editing = () =>
+  document.activeElement?.matches(
+    "input, textarea, select, [contenteditable='true']",
+  );
+async function pollWorkspace() {
+  if (!data) return;
+  refreshFocus();
+  if (polling || status !== "Guardado" || editing()) return;
+  polling = true;
+  const startedRevision = revision;
+  try {
+    const update = await repo.adapter.poll();
+    if (
+      !update ||
+      revision !== startedRevision ||
+      status !== "Guardado" ||
+      editing()
+    )
+      return;
+    const incoming = prepareData(update.data);
+    data = incoming;
+    repo.adapter.revision = update.revision;
+    history = [];
+    future = [];
+    clearSelection();
+    if (view === "focus") refreshFocus();
+    else render();
+  } catch {
+    // Keep the current document and retry on the next tick, including after reconnecting.
+  } finally {
+    polling = false;
+  }
+}
+setInterval(pollWorkspace, 1000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) pollWorkspace();
+});
 document.addEventListener("click", (e) => {
   document.querySelectorAll(".focus-menu[open]").forEach((menu) => {
     if (!menu.contains(e.target)) menu.open = false;
@@ -1005,7 +1073,18 @@ function bindGrids() {
       lastGrid = grid;
       clearSelection();
     };
-    el.onmousedown = clearSelection;
+    el.closest("td").onmousedown = (event) => {
+      if (event.button !== 0) return;
+      if (event.shiftKey) {
+        event.preventDefault();
+        closeSuggestions();
+        select(grid, i, true);
+      } else {
+        clearSelection();
+        selection.grid = grid;
+        selection.anchor = i;
+      }
+    };
     let previousDraft = el.value;
     const timed = ["estimate", "start", "end"].includes(field);
     const finishTime = () => {
@@ -1485,20 +1564,24 @@ document.addEventListener("paste", (e) => {
 });
 window.addEventListener("resize", closeSuggestions);
 window.addEventListener("scroll", closeSuggestions, true);
-try {
-  data = migrate(await repo.load());
-  validate(data);
-  data.syncRevision = 1;
-  for (const d of Object.values(data.days)) {
+function prepareData(raw) {
+  const incoming = migrate(raw);
+  validate(incoming);
+  incoming.syncRevision = 1;
+  for (const d of Object.values(incoming.days)) {
     normalizeDocument(d.plan);
     deriveEnds(d.plan);
     if (d.actual) {
       normalizeDocument(d.actual);
-      registerTasks(data, d.actual);
+      registerTasks(incoming, d.actual);
     }
   }
+  return incoming;
+}
+try {
+  data = prepareData(await repo.load());
   render();
 } catch {
   document.querySelector("#app").innerHTML =
-    "<main><h1>No pudimos leer tus datos</h1><p>Los datos locales se conservaron en jornada.v1.</p></main>";
+    `<main><h1>No pudimos leer tus datos</h1><p>${localMode ? "Los datos locales se conservaron en jornada.v1." : "No se pudieron cargar los datos del servidor. Verificá que esté iniciado y recargá. No se modificaron los datos guardados."}</p></main>`;
 }

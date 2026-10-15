@@ -27,6 +27,35 @@ async function menu(page) {
   await page.getByLabel("Copias de seguridad").click();
 }
 
+test("clic y Shift+clic seleccionan filas intermedias en ambos sentidos", async ({
+  page,
+}) => {
+  await example(page);
+  const selected = table(page, "tasks").locator("tbody tr.selected");
+  await task(page, 2).click();
+  await cell(page, "tasks", 5, "Prioridad").click({ modifiers: ["Shift"] });
+  await expect(selected).toHaveCount(4);
+  for (const row of await selected.all())
+    await expect(row).toHaveAttribute("aria-selected", "true");
+  expect(
+    await selected.evaluateAll((rows) =>
+      rows.map((row) => Number(row.dataset.index)),
+    ),
+  ).toEqual([1, 2, 3, 4]);
+  await task(page, 3).click({ modifiers: ["Shift"] });
+  await expect(selected).toHaveCount(2);
+  await task(page, 4).click();
+  await expect(selected).toHaveCount(0);
+  await cell(page, "tasks", 1, "Identificador").click({ modifiers: ["Shift"] });
+  expect(
+    await selected.evaluateAll((rows) =>
+      rows.map((row) => Number(row.dataset.index)),
+    ),
+  ).toEqual([0, 1, 2, 3]);
+  await page.keyboard.press("Delete");
+  await expect(table(page, "tasks").locator("tbody tr")).toHaveCount(1);
+});
+
 test("respeta el documento original: texto, cinco definiciones y cuatro bloques con paralelo", async ({
   page,
 }) => {
@@ -938,13 +967,20 @@ test("Foco anticipa tres horas en gris sin activar controles y anima al terminar
       .getPropertyValue("--muted")
       .trim(),
   }));
-  expect(sizes.active).toBe(sizes.next);
-  await expect(upcoming.first()).toHaveCSS("color", "rgb(105, 113, 108)");
+  expect(parseFloat(sizes.next)).toBeLessThan(parseFloat(sizes.active));
+  await expect(upcoming.first()).toHaveCSS("color", "rgb(133, 140, 135)");
   await page.clock.runFor(1300);
   await expect(page.locator("[data-focus-id]")).toHaveCount(2);
   await expect(upcoming).toHaveCount(2);
   await page.clock.fastForward(2 * 3600000 + 29 * 60000 + 58000);
   await page.clock.runFor(400);
+  // Finish earlier browser animations before observing the next clock boundary.
+  await page.evaluate(() =>
+    document.getAnimations().forEach((animation) => {
+      if (animation.effect?.target?.closest?.(".focus-list"))
+        animation.finish();
+    }),
+  );
   await page.evaluate(() => {
     window.focusAnimations = [];
     const original = Element.prototype.animate;
@@ -1007,7 +1043,11 @@ test("Foco incluye próximas tareas al cruzar medianoche y respeta el límite de
   await expect(page.locator(".focus-upcoming h2")).toHaveText(
     "Instalar el centro de decisiones",
   );
-  await expect(page.locator(".focus-upcoming time")).toHaveText("02:00 - 04:00");
+  await expect(page.locator(".focus-upcoming time")).toHaveText(
+    "02:00 - 04:00",
+  );
+  await page.clock.runFor(61000);
+  await expect(page.locator(".focus-upcoming")).toHaveCount(3);
 });
 
 async function focusAction(page, name, action) {
@@ -1157,13 +1197,16 @@ test("las próximas tareas se iluminan al pasar el cursor sin activarse", async 
     "rgb(185, 192, 186)",
   );
   const activeColor = "rgb(185, 192, 186)";
-  await expect(next).toHaveCSS("color", "rgb(114, 123, 117)");
+  await expect(next).toHaveCSS("color", "rgb(98, 107, 101)");
   await next.hover();
-  await expect(next.locator("h2")).toHaveCSS("color", activeColor);
+  for (const row of await page.locator(".focus-upcoming").all()) {
+    await expect(row.locator("h2")).toHaveCSS("color", activeColor);
+    await expect(row.locator("time")).toHaveCSS("color", activeColor);
+  }
   await expect(next.getByRole("progressbar")).toHaveCount(0);
   await expect(next.locator("[data-focus-priority]")).toHaveCount(0);
   await page.locator("#nav-focus").hover();
-  await expect(next).toHaveCSS("color", "rgb(114, 123, 117)");
+  await expect(next).toHaveCSS("color", "rgb(98, 107, 101)");
 });
 
 test("Foco simplifica la fila, permite drag desde el contador y conserva resaltado con menú abierto", async ({
@@ -1206,7 +1249,7 @@ test("Foco simplifica la fila, permite drag desde el contador y conserva resalta
   });
   await next.locator("summary").focus();
   await page.keyboard.press("Escape");
-  await expect(next).toHaveCSS("color", "rgb(114, 123, 117)");
+  await expect(next).toHaveCSS("color", "rgb(98, 107, 101)");
 });
 
 test("los menús de prioridad y acciones se cierran al hacer clic fuera y al abrir otro", async ({

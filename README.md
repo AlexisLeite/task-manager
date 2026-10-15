@@ -1,23 +1,23 @@
 # Jornada
 
-Aplicación local de navegador para escribir jornadas con dos partes: **Tareas para hoy** y **Plan de trabajo**. No existe una meta obligatoria de horas.
+Aplicación local con backend SQLite y editor de navegador para escribir jornadas con dos partes: **Tareas para hoy** y **Plan de trabajo**. No existe una meta obligatoria de horas.
 
 ## Ejecutar
 
-Requiere Node.js 22.12+ y npm.
+Requiere Node.js 22.13+ y npm (SQLite integrado en Node).
 
 ```sh
 npm install
 npm run dev
 ```
 
-Abrir http://127.0.0.1:5173. Usar siempre el mismo origen: `localhost` y `127.0.0.1` guardan sus datos por separado. El servidor queda disponible mientras el proceso esté encendido.
+Abrir http://127.0.0.1:5173. Para Console Monitor: `npm run dev -- --port 1111 --strictPort`. El mismo proceso levanta Vite en watch y la API con SQLite. Los datos son compartidos entre navegadores; el tema sigue siendo local a cada navegador.
 
 ```sh
 npm run build
 ```
 
-El build estático queda en `dist/`. No usa servicios externos ni necesita cuentas.
+El build queda en `dist/`. `npm start` sirve la app y la API en http://127.0.0.1:1111; `PORT` cambia el puerto. No necesita servicios externos ni cuentas. El servidor está limitado a 127.0.0.1 y pensado para uso local.
 
 ## Documento y planificación
 
@@ -35,6 +35,8 @@ El build estático queda en `dist/`. No usa servicios externos ni necesita cuent
 Las rutas `/#/foco`, `/#/jornada` y `/#/mes` permiten navegación SPA sin recargar, enlaces directos y Atrás/Adelante. El contenido completo se desliza según la dirección entre pestañas y el encabezado permanece fijo.
 
 ## Foco
+
+Un mismo sondeo cada segundo recalcula las actividades según la hora y consulta cambios de otros clientes con ETag (304 si no hay novedades). La actualización es silenciosa; se pospone mientras se edita un campo o hay cambios sin guardar. Al aceptar datos externos se limpia el historial de deshacer para evitar restaurar versiones antiguas. Las tareas nuevas se crean con prioridad baja.
 
 El menú contiene **Foco, Jornada y Mes**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
 
@@ -80,31 +82,21 @@ El botón **Oscuro / Claro** guarda la preferencia en `jornada.theme` y la aplic
 
 El menú `⋯` permite exportar e importar copias JSON. La importación pide confirmación, valida el formato y se puede deshacer. Los fallos de escritura son visibles y permiten exportar los datos en memoria. Los datos corruptos no se sobrescriben.
 
-## Persistencia intercambiable
+## SQLite y persistencia intercambiable
 
-`src/storage.js` contiene `LocalStorageAdapter` y `Repository`. Para usar un backend, implementar un adaptador con `async load()` y `async save(document)` e inyectarlo en el constructor de `Repository` de `src/app.js`. El editor no usa localStorage para leer o escribir jornadas directamente; la preferencia visual es independiente y local al dispositivo.
+La app utiliza `BackendAdapter` de `src/storage.js` por defecto. `Repository` conserva el contrato `load()` / `save(document)` y serializa las escrituras. El adaptador local se mantiene para pruebas aisladas (`vite --mode test`); no hay fallback automático a localStorage si el backend falla.
 
-```js
-class BackendAdapter {
-  async load() {
-    const response = await fetch("/api/jornadas");
-    if (!response.ok) throw new Error("Error al cargar");
-    return response.json();
-  }
-  async save(document) {
-    const response = await fetch("/api/jornadas", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(document),
-    });
-    if (!response.ok) throw new Error("Error al guardar");
-  }
-}
+La base está en `data/worktrack.sqlite` (configurable con `WORKTRACK_DB`). SQLite guarda el documento completo como JSON, incluidos campos históricos, en una transacción atómica con WAL y revisión incremental. `GET /api/workspace` devuelve el documento con ETag; `PUT /api/workspace` exige If-Match. Una escritura desactualizada recibe 409 y muestra un aviso sin sobrescribir datos. `GET /api/health` verifica que el proceso está disponible.
+
+Para inicializar una base vacía con una exportación:
+
+```sh
+npm run seed -- "ruta/a/jornada.json"
 ```
 
-El repositorio serializa las escrituras y copia cada snapshot para evitar cambios fuera de orden con un adaptador asíncrono. El contrato es `{version: 2, days: {[fecha]: {plan, actual}}, tasks}`. Cada documento tiene `title`, `intro`, `tasks` y `blocks`. `actual: null` significa que aún no se inició la reconciliación. Las referencias de bloques son IDs de las definiciones, y `taskId` identifica la tarea reutilizable entre jornadas.
+El seed valida el documento, lo importa íntegro y conserva una copia inicial en la tabla `seed_backup`. Rechaza ejecutarse sobre una base que ya tiene datos. La exportación JSON de la interfaz sigue disponible para copias portables. Para copiar directamente los archivos SQLite, detener primero el servidor. La carpeta `data/` está excluida de Git.
 
-Se conserva la clave `jornada.v1` para migrar los datos de la primera implementación. Antes de la primera escritura del formato nuevo se guarda el documento antiguo en `jornada.backup.v1`. La reparación de duplicados conserva los bloques retirados en `recoveredBlocks` y una copia previa en `jornada.backup.before-sync`; los intervalos distintos se mantienen. Los antiguos títulos e introducciones siguen conservados en los datos, aunque ya no aparecen en pantalla. El modelo y la migración están en `src/model.js`. Esta versión está pensada para una pestaña de edición; una integración de backend deberá resolver autenticación y conflictos concurrentes.
+Los datos antiguos de localStorage no se importan automáticamente: se utiliza la exportación elegida como seed, para evitar reemplazarla con un estado viejo de otro navegador. El tema sigue guardado en `jornada.theme`.
 
 ## Pruebas
 
@@ -112,9 +104,12 @@ Se conserva la clave `jornada.v1` para migrar los datos de la primera implementa
 npx playwright install chromium
 npm run test:unit
 npm run test:e2e
+npm run test:backend
 npx playwright show-report
 ```
 
 Playwright ejecuta Chromium real, levanta el servidor si es necesario y usa el portapapeles real con un solo worker para evitar interferencias del sistema. Cubre el documento original, referencias entre secciones, inclusión automática de todas las tareas, navegación, selección y movimiento de líneas, clipboard de texto y filas, TSV, drag, deshacer, reconciliación, sugerencias, identidad entre días, resumen mensual, persistencia, copias, migración, errores de almacenamiento, duración, prioridades y tema oscuro.
 
 Las pruebas de contrato verifican que un adaptador asíncrono conserve el orden de escritura, que se pueda guardar después de un error y que la sincronización preserve todas las tareas. El reporte HTML queda en `playwright-report/`; se retienen trazas de fallos y capturas de la pantalla clara, oscura y angosta en `test-results/`. La validación de esta versión cubre Chromium; no certifica otros motores.
+
+Las pruebas de backend usan bases SQLite temporales, nunca los datos del usuario. Verifican persistencia al reabrir la base, seed sin sobrescritura, validación, conflictos de revisión, carga desde otro navegador y reconciliación mediante HTTP.

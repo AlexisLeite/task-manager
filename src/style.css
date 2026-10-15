@@ -502,6 +502,18 @@ td select {
   display: none;
 }
 
+#app:has(#focus-content) {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+main:has(#focus-content) {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
 .focus-list {
   list-style: none;
   padding: 0;
@@ -510,9 +522,8 @@ td select {
 .focus-card {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px 28px;
+  gap: 4px 28px;
   padding: 22px 0;
-  border-bottom: 1px solid var(--line);
 }
 .focus-title {
   display: flex;
@@ -564,10 +575,11 @@ td select {
 }
 .focus-progress {
   grid-column: 1 / -1;
+  margin-left: 32px;
+  margin-right: 36px;
   height: 3px;
   background: var(--hover);
   overflow: hidden;
-  margin-top: 4px;
 }
 .focus-progress > div {
   height: 100%;
@@ -593,7 +605,13 @@ td select {
 @media (max-width: 600px) {
   .focus-card {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 4px;
+  }
+  .focus-progress {
+    grid-row: 2;
+  }
+  .focus-card[data-focus-id] .focus-remaining {
+    justify-content: flex-end;
   }
   .focus-card h2 {
     font-size: 18px;
@@ -609,11 +627,24 @@ td select {
 }
 
 #focus-content .focus-upcoming {
-  color: var(--muted);
+  color: #858c87;
+  padding: 10px 0;
+  width: 80%;
+  margin-inline: auto;
+}
+.focus-card[data-focus-id] + .focus-upcoming {
+  margin-top: 48px;
 }
 .focus-upcoming h2,
 .focus-upcoming time {
   color: inherit;
+  font-size: 16px;
+}
+@media (max-width: 600px) {
+  .focus-upcoming h2,
+  .focus-upcoming time {
+    font-size: 14px;
+  }
 }
 .focus-menu {
   position: relative;
@@ -631,6 +662,11 @@ td select {
 }
 .focus-menu summary::-webkit-details-marker {
   display: none;
+}
+.focus-remaining > .focus-menu > summary {
+  width: 24px;
+  padding-inline: 0;
+  text-align: center;
 }
 .focus-menu > div {
   position: absolute;
@@ -657,16 +693,19 @@ td select {
   z-index: 2;
 }
 :root[data-theme="dark"] #focus-content .focus-upcoming {
-  color: #727b75;
+  color: #626b65;
 }
 #focus-content .focus-upcoming .focus-remaining > span {
   color: inherit;
 }
-#focus-content .focus-upcoming:hover,
+#focus-content .focus-list:has(.focus-upcoming:hover) .focus-upcoming,
 #focus-content .focus-upcoming:has(.focus-menu[open]) {
   color: var(--text);
 }
-:root[data-theme="dark"] #focus-content .focus-upcoming:hover,
+:root[data-theme="dark"]
+  #focus-content
+  .focus-list:has(.focus-upcoming:hover)
+  .focus-upcoming,
 :root[data-theme="dark"] #focus-content .focus-upcoming:has(.focus-menu[open]) {
   color: #b9c0ba;
 }

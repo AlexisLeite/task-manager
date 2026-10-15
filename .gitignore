@@ -2,3 +2,8 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

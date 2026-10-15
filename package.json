@@ -7,7 +7,10 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "test:e2e": "playwright test",
-    "test:unit": "node --test unit/*.test.js"
+    "test:unit": "node --test unit/*.test.js",
+    "start": "node server/index.js",
+    "seed": "node server/seed.js",
+    "test:backend": "npm run build && playwright test -c playwright.backend.config.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
@@ -16,5 +19,8 @@
   },
   "dependencies": {
     "@formkit/auto-animate": "^0.10.0"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

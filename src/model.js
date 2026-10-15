@@ -36,7 +36,7 @@ export const task = (tasks) => ({
   taskId: uid(),
   code: nextCode(tasks),
   estimate: "",
-  priority: "Media",
+  priority: "Baja",
   name: "",
 });
 export function union(blocks) {

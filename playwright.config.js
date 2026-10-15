@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: "backend.spec.js",
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
@@ -11,7 +12,7 @@ export default defineConfig({
     permissions: ["clipboard-read", "clipboard-write"],
   },
   webServer: {
-    command: "npm run dev",
+    command: "npm run dev -- --mode test",
     url: "http://127.0.0.1:5173",
     reuseExistingServer: !process.env.CI,
   },
