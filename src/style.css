@@ -531,6 +531,18 @@ main:has(#focus-content) {
   gap: 8px;
   min-width: 0;
 }
+.focus-card.focus-shared {
+  padding-block: 5px;
+}
+.focus-card.focus-shared-first {
+  padding-top: 22px;
+}
+.focus-card.focus-shared-last {
+  padding-bottom: 22px;
+}
+.focus-shared .focus-progress {
+  margin-top: 16px;
+}
 .focus-priority {
   position: relative;
   display: inline-flex;
@@ -577,7 +589,8 @@ main:has(#focus-content) {
   grid-column: 1 / -1;
   margin-top: 2px;
   width: 60%;
-  justify-self: center;
+  justify-self: start;
+  margin-left: 32px;
   height: 3px;
   background: var(--hover);
   overflow: hidden;

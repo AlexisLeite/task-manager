@@ -574,7 +574,15 @@ function activeFocus() {
   }
   const order = plan?.focusOrder || [];
   const rank = (id) => (order.includes(id) ? order.indexOf(id) : order.length);
-  return [...active.values()].sort((a, b) => rank(a.task.id) - rank(b.task.id));
+  const groups = new Map();
+  for (const entry of [...active.values()].sort(
+    (a, b) => rank(a.task.id) - rank(b.task.id),
+  )) {
+    const key = `${entry.start}-${entry.end}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  return [...groups.values()].flat();
 }
 function upcomingFocus() {
   const now = new Date(),
@@ -702,8 +710,22 @@ function focusHtml() {
   return `<ul class="focus-list">${active
     .map((entry, i) => {
       const t = entry.task;
-      return `<li data-entry-key="${esc(entry.task.id)}" data-focus-id="${esc(t.id)}" data-focus-drag draggable="true" tabindex="0" class="focus-card">
-      <div class="focus-title"><details class="focus-menu focus-priority"><summary aria-label="Prioridad de ${esc(t.name || t.code)}"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" aria-hidden="true"></span></summary><div>${["Baja", "Media", "Alta"].map((p) => `<button data-focus-priority="${p}" aria-pressed="${p === normalizePriority(t.priority)}"><span class="priority-dot ${p.toLowerCase()}" aria-hidden="true"></span> ${p}</button>`).join("")}</div></details><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining"><time aria-label="Tiempo restante"></time>${focusMenu(entry)}</div><div class="focus-progress" role="progressbar" aria-label="Tiempo restante de ${esc(t.name || t.code)}" aria-valuemin="0" aria-valuemax="100"><div></div></div>
+      const shared = active.filter(
+        (other) => other.start === entry.start && other.end === entry.end,
+      );
+      const progress =
+        shared.at(-1) === entry
+          ? `<div class="focus-progress" role="progressbar" aria-label="Tiempo restante de ${esc(shared.map(({ task }) => task.name || task.code).join(", "))}" aria-valuemin="0" aria-valuemax="100"><div></div></div>`
+          : "";
+      const counter = progress
+        ? '<time aria-label="Tiempo restante"></time>'
+        : "";
+      const groupClass =
+        shared.length > 1
+          ? ` focus-shared${shared[0] === entry ? " focus-shared-first" : ""}${shared.at(-1) === entry ? " focus-shared-last" : ""}`
+          : "";
+      return `<li data-entry-key="${esc(entry.task.id)}" data-focus-id="${esc(t.id)}" data-focus-drag draggable="true" tabindex="0" class="focus-card${groupClass}">
+      <div class="focus-title"><details class="focus-menu focus-priority"><summary aria-label="Prioridad de ${esc(t.name || t.code)}"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" aria-hidden="true"></span></summary><div>${["Baja", "Media", "Alta"].map((p) => `<button data-focus-priority="${p}" aria-pressed="${p === normalizePriority(t.priority)}"><span class="priority-dot ${p.toLowerCase()}" aria-hidden="true"></span> ${p}</button>`).join("")}</div></details><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${counter}${focusMenu(entry)}</div>${progress}
     </li>`;
     })
     .join("")}${upcoming
@@ -740,6 +762,23 @@ function refreshFocus() {
   for (const fresh of desired) {
     const el = existing.get(fresh.dataset.entryKey) || fresh;
     if (el !== fresh) {
+      el.className = fresh.className;
+      const currentTime = el.querySelector(
+        'time[aria-label="Tiempo restante"]',
+      );
+      const incomingTime = fresh.querySelector(
+        'time[aria-label="Tiempo restante"]',
+      );
+      if (currentTime && !incomingTime) currentTime.remove();
+      else if (!currentTime && incomingTime)
+        el.querySelector(".focus-remaining").prepend(
+          incomingTime.cloneNode(true),
+        );
+      const currentProgress = el.querySelector(".focus-progress");
+      const incomingProgress = fresh.querySelector(".focus-progress");
+      if (currentProgress && !incomingProgress) currentProgress.remove();
+      else if (!currentProgress && incomingProgress)
+        el.append(incomingProgress.cloneNode(true));
       for (const selector of ["h2", ".focus-upcoming time"]) {
         const current = el.querySelector(selector);
         const incoming = fresh.querySelector(selector);
@@ -773,15 +812,18 @@ function refreshFocus() {
   node.querySelectorAll("[data-focus-id]").forEach((el, i) => {
     const { start, end, current } = active[i],
       remaining = end - current;
-    el.querySelector("time").textContent = [
-      Math.floor(remaining / 3600),
-      Math.floor(remaining / 60) % 60,
-      remaining % 60,
-    ]
-      .map((n) => String(n).padStart(2, "0"))
-      .join(":");
+    const counter = el.querySelector("time");
+    if (counter)
+      counter.textContent = [
+        Math.floor(remaining / 3600),
+        Math.floor(remaining / 60) % 60,
+        remaining % 60,
+      ]
+        .map((n) => String(n).padStart(2, "0"))
+        .join(":");
     const percent = (remaining / (end - start)) * 100,
       progress = el.querySelector('[role="progressbar"]');
+    if (!progress) return;
     progress.setAttribute("aria-valuenow", percent.toFixed(2));
     progress.firstElementChild.style.width = `${percent}%`;
   });

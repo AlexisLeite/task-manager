@@ -1,6 +1,39 @@
 import { test, expect } from "@playwright/test";
 import { example } from "../src/model.js";
 
+test("las tareas comparten barra solo si coinciden inicio y fin, incluso en bloques distintos", async ({
+  page,
+  request,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-15T17:00:00") });
+  await page.goto("/#/foco");
+  await expect(page.locator("[data-focus-id]")).toHaveCount(2);
+  await expect(page.getByRole("progressbar")).toHaveCount(1);
+  await expect(page.locator("[data-focus-id] time")).toHaveCount(1);
+  const change = async (start) => {
+    const response = await request.get("/api/workspace");
+    const data = await response.json();
+    data.days["2026-10-15"].plan.blocks[0].start = start;
+    // The first task lasts two hours; normalization derives its end.
+    data.days["2026-10-15"].plan.tasks[0].estimate =
+      start === "16:30" ? "02:30" : "03:00";
+    data.days["2026-10-15"].plan.blocks[0].end = "19:00";
+    await request.put("/api/workspace", {
+      headers: { "If-Match": response.headers().etag },
+      data,
+    });
+    await page.clock.runFor(1100);
+  };
+  await change("16:30");
+  await expect(page.locator("[data-focus-id]")).toHaveCount(3);
+  await expect(page.getByRole("progressbar")).toHaveCount(1);
+  await change("16:00");
+  await expect(page.getByRole("progressbar")).toHaveCount(2);
+  await expect(page.locator("[data-focus-id] time")).toHaveCount(2);
+  await change("16:30");
+  await expect(page.getByRole("progressbar")).toHaveCount(1);
+});
+
 test.beforeEach(async ({ request }) => {
   const current = await request.get("/api/workspace");
   const result = await request.put("/api/workspace", {

@@ -833,13 +833,11 @@ test("Foco muestra actividades actuales en paralelo y actualiza el tiempo restan
   );
   await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
     "02:30:00",
-    "02:30:00",
   ]);
   await expect(page.locator("table")).toHaveCount(0);
   await expect(page.getByLabel("Fecha de jornada")).toBeHidden();
   await page.clock.fastForward(1000);
   await expect(page.locator(".focus-list [data-focus-id] time")).toHaveText([
-    "02:29:59",
     "02:29:59",
   ]);
   await page.clock.fastForward(8999000);
@@ -898,17 +896,12 @@ test("Foco abre por defecto, conserva controles al contar y guarda orden y prior
     .click();
   await cards.first().locator(".focus-priority summary").focus();
   const initial = Number(
-    await cards.first().getByRole("progressbar").getAttribute("aria-valuenow"),
+    await page.getByRole("progressbar").getAttribute("aria-valuenow"),
   );
   await page.clock.fastForward(60000);
   await expect(cards.first().locator(".focus-priority summary")).toBeFocused();
   expect(
-    Number(
-      await cards
-        .first()
-        .getByRole("progressbar")
-        .getAttribute("aria-valuenow"),
-    ),
+    Number(await page.getByRole("progressbar").getAttribute("aria-valuenow")),
   ).toBeLessThan(initial);
   await cards.first().focus();
   await page.keyboard.press("Alt+ArrowDown");
@@ -924,10 +917,7 @@ test("Foco abre por defecto, conserva controles al contar y guarda orden y prior
   await expect(cards.first().locator("h2")).toHaveText(firstName);
   await cards.first().locator("h2").dragTo(cards.last());
   await expect(cards.last().locator("h2")).toHaveText(firstName);
-  await expect(cards.first().getByRole("progressbar")).toHaveCSS(
-    "height",
-    "3px",
-  );
+  await expect(page.getByRole("progressbar")).toHaveCSS("height", "3px");
   await page.getByRole("button", { name: "Activar tema oscuro" }).click();
   await page.screenshot({ path: "test-results/foco-dark.png", fullPage: true });
   await page.setViewportSize({ width: 390, height: 500 });
@@ -1209,7 +1199,7 @@ test("las próximas tareas se iluminan al pasar el cursor sin activarse", async 
   await expect(next).toHaveCSS("color", "rgb(98, 107, 101)");
 });
 
-test("Foco simplifica la fila, permite drag desde el contador y conserva resaltado con menú abierto", async ({
+test("Foco simplifica la fila, permite drag y conserva resaltado con menú abierto", async ({
   page,
 }) => {
   await page.clock.install({ time: new Date("2026-10-15T17:00:00") });
@@ -1223,7 +1213,7 @@ test("Foco simplifica la fila, permite drag desde el contador y conserva resalta
   await expect(page.getByText("Inicio", { exact: true })).toHaveCount(0);
   const active = page.locator("[data-focus-id]");
   const first = await active.first().locator("h2").textContent();
-  await active.first().locator("time").dragTo(active.last());
+  await active.first().locator("h2").dragTo(active.last());
   await expect(active.last().locator("h2")).toHaveText(first);
   await active
     .last()
