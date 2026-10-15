@@ -1,6 +1,6 @@
 # Jornada
 
-Aplicación local de navegador para escribir jornadas con dos partes: **Tareas pendientes importantes** y **Plan de trabajo**. No existe una meta obligatoria de horas.
+Aplicación local de navegador para escribir jornadas con dos partes: **Tareas para hoy** y **Plan de trabajo**. No existe una meta obligatoria de horas.
 
 ## Ejecutar
 
@@ -25,16 +25,20 @@ El build estático queda en `dist/`. No usa servicios externos ni necesita cuent
 - **Todas** las tareas pendientes aparecen automáticamente en el plan. No hay que crearlas otra vez. Sus identidades se conservan cuando se reordenan o se cambia su código.
 - Al editar el inicio, el fin se calcula con la duración definida arriba; en bloques paralelos usa la mayor duración. Al editar el fin, se actualiza la duración de las tareas del bloque. Las descripciones del plan reflejan automáticamente los nombres de las tareas.
 - Las tareas simultáneas pueden compartir horario. El ejemplo incluye `t2,t3` en un solo bloque. Las referencias pueden agruparse también al pegar una fila tabulada. Cada tarea del bloque tiene su indicador de prioridad: verde, amarillo o rojo, con una etiqueta accesible que identifica tarea y prioridad.
-- Reordenar conserva los inicios. **Encadenar horarios** es una acción explícita y reversible para colocar los bloques uno detrás del otro.
+- Al salir de la grilla Plan de trabajo, las filas se ordenan por inicio; los empates conservan su orden y las filas sin horario quedan al final. Dentro de la grilla no se reordenan automáticamente. Reordenar conserva los inicios. **Encadenar horarios** es una acción explícita y reversible para colocar los bloques uno detrás del otro.
 - Si se quita un bloque del plan, sus tareas siguen pendientes y aparecen sin horario al final. Para quitar una tarea, se elimina de la sección de tareas. Cortar y pegar mueve filas; al mover definiciones dentro de la misma jornada, se restauran sus referencias originales.
 - No existe categoría ni control de descanso. Una tarea llamada “Descanso” se trata como cualquier otra. El total es la unión de los intervalos: no duplica las horas en paralelo.
 - Las horas de inicio y fin corresponden al mismo día. Para cruzar medianoche, dividir el trabajo entre jornadas.
 
 **Cargar ejemplo** carga las tareas y horarios del ejemplo original. Está visible en una jornada vacía; si ya tiene datos, está en el menú `⋯` y pide confirmación antes de reemplazarlos. Se puede deshacer.
 
+Las rutas `/#/foco`, `/#/jornada` y `/#/mes` permiten navegación SPA sin recargar, enlaces directos y Atrás/Adelante. El contenido completo se desliza según la dirección entre pestañas y el encabezado permanece fijo.
+
 ## Foco
 
-El menú contiene **Foco, Jornada y Mes**. Foco muestra únicamente las actividades planificadas para hoy cuyo intervalo incluye la hora actual, independientemente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque.
+El menú contiene **Foco, Jornada y Mes**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
+
+El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Realizado el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
 
 ## Reconciliación y mes
 
