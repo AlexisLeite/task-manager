@@ -575,8 +575,8 @@ main:has(#focus-content) {
 }
 .focus-progress {
   grid-column: 1 / -1;
-  margin-left: 32px;
-  margin-right: 36px;
+  width: 60%;
+  justify-self: center;
   height: 3px;
   background: var(--hover);
   overflow: hidden;
