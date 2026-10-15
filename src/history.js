@@ -209,7 +209,7 @@ export function historyHtml(data, filters = {}) {
     </div></div>
     <p class="history-error" role="alert" ${history.error ? "" : "hidden"}>${escapeHtml(history.error)}</p>
 
-    <div class="history-chart-region">${history.days.length ? `<div class="history-charts">${projectChart(history)}${taskChart(history)}</div>` : ""}</div>
+    <div class="history-chart-region">${history.days.length ? `<h2>Estadísticas</h2><div class="history-charts">${projectChart(history)}${taskChart(history)}</div>` : ""}</div>
     <div class="history-section-header"><h2>Tareas realizadas</h2><button id="history-search-toggle" aria-label="Buscar tareas realizadas" aria-expanded="${!!filters.searchOpen}" aria-controls="history-search-panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div>
     <div id="history-search-panel" class="history-accordion" ${filters.searchOpen ? "" : "hidden"}><div class="history-search-inner"><input id="history-search" type="search" aria-label="Buscar tareas por nombre" placeholder="Buscar tareas…" value="${escapeHtml(filters.query || "")}"></div></div>
     <p id="history-search-empty" class="empty" ${history.tasks.length && !history.tasks.some((task) => historyMatches(task.name, filters.query)) ? "" : "hidden"}>No hay tareas que coincidan con la búsqueda.</p>

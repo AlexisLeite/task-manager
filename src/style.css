@@ -227,12 +227,14 @@ table {
 @media (prefers-reduced-motion: reduce) { .grid-options { animation: none; } }
 .plan-status {
   vertical-align: middle;
+  text-align: center;
   color: var(--muted);
 }
+[data-table="blocks"] th:last-child { text-align: center; }
 .plan-status-icon {
   display: inline-flex;
   vertical-align: middle;
-  margin-right: 5px;
+  margin: 0 2px;
 }
 .plan-status-icon[data-status="pending"] { color: #e1b521; }
 .plan-status-icon[data-status="finished"] { color: #32a852; }
@@ -275,14 +277,23 @@ td input {
 }
 td.hours {
   position: relative;
+  white-space: nowrap;
+  text-align: center;
 }
 td.hours input {
-  padding-right: 25px;
+  width: calc(5ch + 16px);
+  padding-inline: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+[data-table="blocks"] th:nth-last-child(2),
+[data-table="blocks"] th:nth-last-child(3) {
+  text-align: center;
 }
 td.hours > span {
-  position: absolute;
-  right: 10px;
-  top: 12px;
+  position: static;
+  margin-left: 2px;
+  vertical-align: middle;
   pointer-events: none;
   font-size: 11px;
   color: var(--muted);
@@ -311,6 +322,12 @@ td.hours > span {
 }
 .selected td {
   background: var(--selected);
+}
+[data-table] tr.linked-task-hover:not(.selected) > td {
+  background-color: var(--hover);
+}
+#app [data-table] tbody td {
+  transition-property: color, border-color, outline-color;
 }
 .invalid input {
   color: var(--danger);

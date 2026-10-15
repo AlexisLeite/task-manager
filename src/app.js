@@ -571,7 +571,7 @@ function gridHtml(grid) {
             const readonly =
               grid === "blocks" &&
               (field === "refs" || field === "description");
-            return `<td class="${field === "start" || field === "end" ? "hours" : ""} ${field === "refs" || (isTask && field === "code") ? "refs-cell" : ""}">${isTask && field === "code" ? `<span class="priority-dots">${priorityControl(r, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i + 1}: Prioridad"`)}</span>` : ""}${field === "refs" ? `<span class="priority-dots" data-block="${i}">${priorityDots(r)}</span>` : ""}<input autocomplete="off" ${attrs} value="${esc(value)}" ${readonly ? "readonly" : ""} ${["estimate", "start", "end"].includes(field) ? timeFieldAttributes(field !== "estimate") : ""} ${isTask && field === "name" ? 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"' : ""}>${field === "start" || field === "end" ? '<span class="unit" aria-hidden="true">hs</span>' : ""}</td>`;
+            return `<td class="${field === "start" || field === "end" ? "hours" : ""} ${field === "refs" || (isTask && field === "code") ? "refs-cell" : ""}">${isTask && field === "code" ? `<span class="priority-dots">${priorityControl(r, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i + 1}: Prioridad"`)}</span>` : ""}${field === "refs" ? `<span class="priority-dots" data-block="${i}">${priorityDots(r)}</span>` : ""}<input autocomplete="off" ${attrs} value="${esc(value)}" ${readonly ? "readonly" : ""} ${["estimate", "start", "end"].includes(field) ? timeFieldAttributes(field !== "estimate") : ""} ${isTask && field === "name" ? 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"' : ""}></td>`;
           })
           .join(
             "",
@@ -1311,6 +1311,16 @@ function actualHtml(actual) {
       "",
     )}</tbody></table></div><p>Total realizado: ${esc(format(totals(actual).work))} hs</p>`;
 }
+function sortDayByStart(current) {
+  const start = row => clock(row.start) ? minutes(row.start) : Infinity;
+  const blocks = [...current.blocks].sort((a, b) => start(a) - start(b));
+  const starts = new Map();
+  for (const row of blocks)
+    for (const id of row.taskIds)
+      starts.set(id, Math.min(starts.get(id) ?? Infinity, start(row)));
+  const tasks = [...current.tasks].sort((a, b) => (starts.get(a.id) ?? Infinity) - (starts.get(b.id) ?? Infinity));
+  return { blocks, tasks, changed: blocks.some((row, i) => row !== current.blocks[i]) || tasks.some((row, i) => row !== current.tasks[i]) };
+}
 function render() {
   isRendering = true;
   closeSuggestions();
@@ -1319,6 +1329,9 @@ function render() {
   if (doc() && mode === "plan") {
     syncPlan(doc());
     if (mode === "plan") deriveEnds(doc());
+    const sorted = sortDayByStart(doc());
+    doc().blocks = sorted.blocks;
+    doc().tasks = sorted.tasks;
   }
   document.querySelector("#app").innerHTML =
     `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
@@ -1614,6 +1627,33 @@ function bindGrids() {
     };
   });
   document.querySelectorAll("[data-table] tbody tr").forEach((el) => {
+    if (el.closest('table').dataset.table === 'blocks') {
+      const clearHover = () => document.querySelectorAll('.linked-task-hover').forEach(row => row.classList.remove('linked-task-hover'));
+      el.onpointerenter = () => {
+        clearHover();
+        const block = doc()?.blocks[Number(el.dataset.index)];
+        if (!block) return;
+        el.classList.add('linked-task-hover');
+        document.querySelectorAll('[data-table="tasks"] tbody tr').forEach(row => {
+          const task = doc().tasks[Number(row.dataset.index)];
+          row.classList.toggle('linked-task-hover', !!task && block.taskIds.includes(task.id));
+        });
+      };
+      el.onpointerleave = clearHover;
+    } else if (el.closest('table').dataset.table === 'tasks') {
+      const clearHover = () => document.querySelectorAll('.linked-task-hover').forEach(row => row.classList.remove('linked-task-hover'));
+      el.onpointerenter = () => {
+        clearHover();
+        const task = doc()?.tasks[Number(el.dataset.index)];
+        if (!task) return;
+        el.classList.add('linked-task-hover');
+        document.querySelectorAll('[data-table="blocks"] tbody tr').forEach(row => {
+          const block = doc().blocks[Number(row.dataset.index)];
+          row.classList.toggle('linked-task-hover', !!block && block.taskIds.includes(task.id));
+        });
+      };
+      el.onpointerleave = clearHover;
+    }
     el.ondragover = (e) => {
       if (dragging?.grid === el.closest("table").dataset.table)
         e.preventDefault();
@@ -1635,17 +1675,33 @@ function bindGrids() {
       )
         return;
       const current = doc();
-      const sorted = [...current.blocks].sort((a, b) => {
-        const left = clock(a.start) ? minutes(a.start) : Infinity;
-        const right = clock(b.start) ? minutes(b.start) : Infinity;
-        return left === right ? 0 : left - right;
-      });
-      if (sorted.every((row, i) => row === current.blocks[i])) return;
+      const sorted = sortDayByStart(current);
+      if (!sorted.changed) return;
+      const target = event.relatedTarget;
+      const targetTask = target?.dataset.grid === 'tasks' ? current.tasks[Number(target.dataset.row)]?.id : null;
+      const targetCol = target?.dataset.col;
+      const positions = new Map();
+      for (const grid of ['tasks', 'blocks'])
+        document.querySelectorAll(`[data-table="${grid}"] tbody tr`).forEach(row => {
+          positions.set(`${grid}:${current[grid][Number(row.dataset.index)].id}`, row.getBoundingClientRect().top);
+        });
       checkpoint();
-      current.blocks = sorted;
+      current.blocks = sorted.blocks;
+      current.tasks = sorted.tasks;
       clearSelection();
       planTable.parentElement.outerHTML = gridHtml("blocks");
+      document.getElementById('add-tasks')?.remove();
+      document.querySelector('[data-table="tasks"]').parentElement.outerHTML = gridHtml('tasks');
+      document.getElementById('add-tasks').onclick = () => add('tasks');
       bindGrids();
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches)
+        for (const grid of ['tasks', 'blocks'])
+          document.querySelectorAll(`[data-table="${grid}"] tbody tr`).forEach(row => {
+            const before = positions.get(`${grid}:${current[grid][Number(row.dataset.index)].id}`);
+            const offset = before - row.getBoundingClientRect().top;
+            if (offset) row.animate([{transform:`translateY(${offset}px)`},{transform:'translateY(0)'}], {duration:250,easing:'ease'});
+          });
+      if (targetTask) focusCell('tasks', current.tasks.findIndex(task => task.id === targetTask), Number(targetCol));
       save();
     });
 }
