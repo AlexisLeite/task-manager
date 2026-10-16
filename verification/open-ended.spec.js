@@ -19,7 +19,7 @@ test('pendiente sin duración ofrece definición, iniciar y cancelar por click d
  await expect(openRow(page)).toHaveClass(/focus-upcoming/);
  await expect(openRow(page).locator('time')).toHaveCount(0);
  const popup=await menu(page);
- await expect(popup.locator('button')).toHaveText(['Ver definición','Iniciar tarea','Cancelar tarea']);
+ await expect(popup.locator('button')).toHaveText(['Ver definición','Iniciar tarea','Posponer tarea','Cancelar tarea']);
  await popup.getByRole('button',{name:'Ver definición',exact:true}).click();
  await page.clock.runFor(500);
  await expect(page).toHaveURL(/#\/jornada$/);
@@ -175,4 +175,51 @@ for (const name of ['Investigar sin duración','Siguiente']) test(`stop en Jorna
  await expect(row.locator('[data-start-task]')).toBeVisible();
  await page.reload();
  await expect(row.locator('[data-status="finished"]')).toBeVisible();
+});
+
+test('posponer desde contexto permite día sin hora y conserva la tarea al recargar',async({page,request})=>{
+ await setup(page,request);
+ await (await menu(page)).getByRole('button',{name:'Posponer tarea',exact:true}).click();
+ const dialog=page.getByRole('dialog');
+ await dialog.locator('[name=day]').fill('2026-10-17');
+ await dialog.locator('[name=hour]').fill('');
+ await dialog.getByRole('button',{name:'Posponer',exact:true}).click();
+ const data=await read(page,request);
+ expect(data.days['2026-10-17'].plan.tasks[0].name).toBe('Investigar sin duración');
+ expect(data.days['2026-10-17'].plan.blocks[0]).toMatchObject({start:'',end:''});
+ await expect(openRow(page)).toHaveCount(0);
+ await page.clock.fastForward(24*60*60000);await page.reload();
+ await expect(openRow(page)).toHaveClass(/focus-upcoming/);
+});
+
+test('calendario de Jornada pospone una completada sin alterar sus horas realizadas',async({page,request})=>{
+ await setup(page,request);await start(page);await page.clock.fastForward(20*60000);
+ await (await menu(page)).getByRole('button',{name:'Terminar tarea',exact:true}).click();
+ const before=await read(page,request);
+ await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
+ const row=page.locator('tr').filter({has:page.locator('input[value="Investigar sin duración"]')});
+ const calendar=row.locator('[data-postpone-task]');
+ await expect(calendar.locator('svg')).toBeVisible();
+ await expect(calendar.locator('xpath=ancestor::td').locator('[data-delete-task]')).toHaveCount(1);
+ await calendar.click();
+ const dialog=page.getByRole('dialog');
+ await dialog.locator('[name=day]').fill('2026-10-17');await dialog.locator('[name=hour]').fill('');
+ await dialog.getByRole('button',{name:'Posponer',exact:true}).click();
+ const data=await read(page,request);
+ expect(data.days['2026-10-16'].actual).toEqual(before.days['2026-10-16'].actual);
+ expect(data.days['2026-10-17'].plan.tasks[0].estimate).toBe('00:20');
+ await expect(row).toHaveCount(0);
+ await page.clock.fastForward(24*60*60000);
+ await page.getByRole('button',{name:'Foco',exact:true}).click();await page.clock.runFor(500);
+ await expect(openRow(page)).toHaveClass(/focus-upcoming/);
+});
+
+test('posponer sin duración también acepta hora hh:mm normalizada',async({page,request})=>{
+ await setup(page,request);
+ await (await menu(page)).getByRole('button',{name:'Posponer tarea',exact:true}).click();
+ const dialog=page.getByRole('dialog');
+ await dialog.locator('[name=day]').fill('2026-10-17');await dialog.locator('[name=hour]').fill('19');
+ await dialog.getByRole('button',{name:'Posponer',exact:true}).click();
+ const data=await read(page,request);
+ expect(data.days['2026-10-17'].plan.blocks[0]).toMatchObject({start:'19:00',end:''});
 });

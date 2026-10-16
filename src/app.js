@@ -819,7 +819,7 @@ function gridHtml(grid) {
     const attrs = `data-grid="tasks" data-row="${i}" data-col="${c}" aria-label="Tarea ${i+1}: ${labels.tasks[c]}"`;
     if(field === 'projectId') return `<td><select ${attrs}>${projectOptions(data,t.projectId)}</select></td>`;
     return `<td class="${c===0?'refs-cell':[1,5,6].includes(c)?'hours':''}">${c===0?`<span class="priority-dots">${priorityControl(t, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i+1}: Prioridad"`)}</span>`:''}<input ${attrs} value="${esc(taskValue(t,field))}" ${[1,5,6].includes(c)?timeFieldAttributes(c===6?'end':c!==1): 'autocomplete="off"'} ${field==='name'?'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"':''}></td>`;
-  }).join('')}<td><div class="task-row-actions"><button class="start-task" data-start-task="${esc(t.id)}" aria-label="Iniciar ${esc(t.code)}" title="Iniciar tarea" ${canStartTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg></button><button class="stop-task" data-stop-task="${esc(t.id)}" aria-label="Terminar ${esc(t.code)}" title="Terminar tarea" ${runningGridTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></div></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
+  }).join('')}<td><div class="task-row-actions"><button class="start-task" data-start-task="${esc(t.id)}" aria-label="Iniciar ${esc(t.code)}" title="Iniciar tarea" ${canStartTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg></button><button class="stop-task" data-stop-task="${esc(t.id)}" aria-label="Terminar ${esc(t.code)}" title="Terminar tarea" ${runningGridTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button><button class="postpone-task" data-postpone-task="${esc(t.id)}" aria-label="Posponer ${esc(t.code)}" title="Posponer tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-9 4h5m-2-2 2 2-2 2"/></svg></button><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></div></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
 }
 
 function activeFocus() {
@@ -877,7 +877,7 @@ function upcomingFocus() {
     for (const b of plan?.blocks || []) {
       if (offset === 0 && !b.end && !b.openStarted && !b.continuation) {
         for (const t of resolved(plan,b)) {
-          if (t.estimate || b.focusStates?.[t.id]) continue;
+          if ((t.estimate && b.start) || b.focusStates?.[t.id]) continue;
           result.push({block:b,date:key,task:t,start:Infinity,label:b.start,key:`next-${key}-${b.id}-${t.id}`,openEnded:true});
         }
         continue;
@@ -914,7 +914,7 @@ function focusMenu(entry, pending = false) {
       pending ? "Iniciar tarea" : "Terminar tarea",
     ],
     ...(!pending && !entry.openEnded ? [["extend", "Extender tarea"]] : []),
-    ...(!entry.openEnded ? [["postpone", "Posponer tarea"]] : []),
+    ["postpone", "Posponer tarea"],
     ["cancel", "Cancelar tarea"],
   ];
   return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div>${actions.map(([action, label]) => `<button data-focus-action="${action}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${label}</button>${action === "definition" ? '<hr role="separator">' : ""}`).join("")}</div></details>`;
@@ -1005,9 +1005,10 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   const original = source?.blocks.find((item) => item.id === blockId);
   const originalTask = source?.tasks.find((item) => item.id === taskId);
   if (!original || !originalTask) return;
-  const length = minutes(originalTask.estimate) || duration(original);
+  const length = minutes(originalTask.estimate) || duration(original) || 0;
+  const originalState = original.focusStates?.[taskId];
   const initial = new Date(
-    Math.max(appNow().getTime(), new Date(`${key}T${original.start}:00`).getTime()) +
+    Math.max(appNow().getTime(), (clock(original.start) ? new Date(`${key}T${original.start}:00`).getTime() : appNow().getTime())) +
       30 * 60000,
   );
   if (initial.getHours() * 60 + initial.getMinutes() + length >= 1440) {
@@ -1018,7 +1019,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   const dialog = document.createElement("dialog");
   dialog.className = "task-dialog";
   dialog.setAttribute("aria-labelledby", "postpone-title");
-  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" ${timeFieldAttributes()} required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p>${reconcile ? `<label>Tiempo trabajado<input name="worked" ${timeFieldAttributes(false)} required value="00:00"></label>` : ""}<p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
+  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora (opcional)<input name="hour" ${timeFieldAttributes()} value="${clock(original.start) ? time(initial.getHours() * 60 + initial.getMinutes()) : ''}"></label><p>Duración: ${esc(time(length))}</p>${reconcile ? `<label>Tiempo trabajado<input name="worked" ${timeFieldAttributes(false)} required value="00:00"></label>` : ""}<p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
   dialog.querySelector('form').oninput = () => { dialog.querySelector('[role="alert"]').textContent = ''; };
   document.body.append(dialog);
   dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
@@ -1045,16 +1046,14 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
     const scheduled = new Date(`${targetDate}T${start}:00`);
     const error = dialog.querySelector("[role=alert]");
     if (
-      !clock(start) ||
-      !Number.isFinite(scheduled.getTime()) ||
-      scheduled <= appNow() ||
-      scheduled <= new Date(`${key}T${original.start}:00`)
+      !targetDate || targetDate < today() ||
+      (start && (!clock(start) || !Number.isFinite(scheduled.getTime()) || scheduled <= appNow()))
     ) {
       error.textContent =
-        "Elegí un día y hora posteriores al horario actual de la tarea y al momento presente.";
+        "Elegí hoy o un día posterior. Si indicás hora, debe ser posterior al momento presente.";
       return;
     }
-    if (!length || minutes(start) + length >= 1440) {
+    if (start && length && minutes(start) + length > 1440) {
       error.textContent =
         "La tarea debe terminar dentro del día elegido. Elegí una hora más temprana.";
       return;
@@ -1062,7 +1061,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
     if (
       !source.blocks.includes(original) ||
       !original.taskIds.includes(taskId) ||
-      original.focusStates?.[taskId]
+      original.focusStates?.[taskId] !== originalState
     ) {
       error.textContent =
         "Esta tarea cambió. Cerrá el diálogo y volvé a intentarlo.";
@@ -1097,7 +1096,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
       ...block(),
       taskIds: [moved.id],
       start,
-      end: time(minutes(start) + length),
+      end: start && length ? time(minutes(start) + length) : '',
       description: moved.name,
       intentionalRepeat: true,
     });
@@ -1113,7 +1112,8 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
     syncPlan(source);
     if (target !== source) syncPlan(target);
     dialog.close();
-    refreshFocus();
+    if (view === "day") render(true);
+    else refreshFocus();
     save();
   };
   dialog.showModal();
@@ -1817,6 +1817,15 @@ function bindGrids() {
           {label:'Completada', choose:()=>changeTaskStatus(t,'finished')},
           {label:'Cancelada', choose:()=>changeTaskStatus(t,'cancelled')},
         ]);
+        return;
+      }
+      const postpone = event.target.closest('[data-postpone-task]');
+      if (postpone) {
+        const t = doc().tasks.find(t => t.id === postpone.dataset.postponeTask);
+        if (t) {
+          const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+          if (row) postponeTask(key,row.id,t.id);
+        }
         return;
       }
       const stop = event.target.closest('[data-stop-task]');

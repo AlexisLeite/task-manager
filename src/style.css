@@ -1146,3 +1146,6 @@ main {
 
 .stop-task { display:inline-flex; align-items:center; justify-content:center; padding:6px; border:0; background:transparent; color:#e04a47; }
 .stop-task[hidden] { display:none; }
+
+.day-grid .delete-col { width:104px; }
+.postpone-task { display:inline-flex; align-items:center; justify-content:center; padding:6px; border:0; background:transparent; color:var(--muted); }
