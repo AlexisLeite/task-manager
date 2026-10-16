@@ -166,3 +166,31 @@ test('scroll usa cuartos de hora e incluye la hora actual entre ellos',async({pa
  await expect(dialog.getByLabel('Día',{exact:true})).toHaveValue('2026-10-16');
  await page.keyboard.press('Escape');expect(await read(page,request)).toEqual(before);
 });
+
+test('abrir y cerrar anima la posición de Foco con posiciones intermedias',async({page,request})=>{
+ await setup(page,request);await page.getByRole('button',{name:'Foco',exact:true}).click();await page.clock.runFor(500);
+ await page.screenshot({animations:'disabled'});
+ const before=await page.locator('main').boundingBox();
+ const dialog=await open(page);
+ const positions=await page.locator('main').evaluate(main=>{
+  const animations=main.getAnimations().filter(a=>a.transitionProperty==='margin-left');
+  if (!animations.length) return null;
+  for(const animation of animations){animation.pause();animation.currentTime=0;}
+  const start=main.getBoundingClientRect().x;
+  for(const animation of animations)animation.currentTime=100;
+  const middle=main.getBoundingClientRect().x;
+  for(const animation of animations)animation.finish();
+  return {start,middle,end:main.getBoundingClientRect().x};
+ });
+ expect(positions).not.toBeNull();
+ expect(positions.start).toBeCloseTo(before.x,0);
+ expect(positions.middle).toBeLessThan(positions.start);
+ expect(positions.middle).toBeGreaterThan(positions.end);
+ await dialog.getByRole('button',{name:'Cancelar',exact:true}).click();
+ const returning=await page.locator('main').evaluate(main=>{
+  const animation=main.getAnimations().find(a=>a.transitionProperty==='margin-left');
+  if(!animation)return false;
+  animation.finish();return true;
+ });
+ expect(returning).toBe(true);
+});
