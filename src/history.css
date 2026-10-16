@@ -105,12 +105,49 @@
   padding-top: 6px;
 }
 .history-task-bar {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) 5ch;
   gap: 14px;
   align-items: center;
   font-size: 11px;
   line-height: 16px;
+}
+.history-chart-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 3px 10px var(--shadow);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+}
+.history-task-bar:hover,
+.history-task-bar:focus-within { z-index: 11; }
+.history-task-bar:hover .history-chart-tooltip,
+.history-task-bar:focus-within .history-chart-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+}
+.history-task-bar:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 3px;
+}
+@media(prefers-reduced-motion:reduce) {
+  .history-chart-tooltip { transition: none; }
 }
 .history-task-label {
   overflow: hidden;
