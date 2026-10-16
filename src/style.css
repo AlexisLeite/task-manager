@@ -286,6 +286,15 @@ td.hours input {
   text-align: center;
   vertical-align: middle;
 }
+main.wide-day { max-width: 1280px; }
+.day-grid { min-width: 850px; }
+.day-grid .project-col { width: 220px; }
+.day-grid .time-col,
+.day-grid .estimate-col { width: 88px; }
+.day-grid th:nth-child(2),
+.day-grid th:nth-child(5),
+.day-grid th:nth-child(6),
+.day-grid th:nth-child(7) { text-align: center; }
 [data-table="blocks"] th:nth-last-child(2),
 [data-table="blocks"] th:nth-last-child(3) {
   text-align: center;
@@ -322,9 +331,6 @@ td.hours > span {
 }
 .selected td {
   background: var(--selected);
-}
-[data-table] tr.linked-task-hover:not(.selected) > td {
-  background-color: var(--hover);
 }
 #app [data-table] tbody td {
   transition-property: color, border-color, outline-color;
@@ -1079,4 +1085,28 @@ main {
   #app .plan-priority > div[popover] {
     transition: none;
   }
+}
+
+.day-grid .delete-col { width: 36px; }
+.status-trigger, .delete-task { display: inline-flex; align-items: center; justify-content: center; padding: 6px; background: transparent; border: 0; color: var(--muted); }
+.delete-task:hover { color: var(--danger); }
+
+.app-clock { display:flex; align-items:center; gap:2px; margin-left:8px; font-variant-numeric:tabular-nums; }
+.app-clock.paused { color:var(--accent); }
+#clock-toggle { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; }
+#app-clock { min-width:84px; }
+.time-travel-dialog { width:340px; margin:80px 24px auto auto; }
+.time-travel-dialog::backdrop { background:transparent; }
+.time-travel-hint { color:var(--muted); font-size:11px; }
+@media(max-width:700px) { .toolbar { flex-wrap:wrap; gap:8px; } .time-travel-dialog { margin:80px auto auto; } }
+
+@media(min-width:900px) {
+  body.time-travel-open main:has(#focus-content) { width:calc(100% - 410px); margin-left:24px; margin-right:386px; }
+}
+@media(max-width:899px) {
+  body.time-travel-open main:has(#focus-content) { padding-top:370px; }
+}
+
+@media(prefers-reduced-motion:no-preference) {
+  main:has(#focus-content) { transition:width 200ms ease,margin 200ms ease,padding 200ms ease; }
 }

@@ -1,3 +1,6 @@
+import {shiftAgenda,dateKey} from "./time-control.js";
+import {alphabetical} from "./option-order.js";
+import {shiftDate, endMinute, canonicalWorkspace, refreshContinuations, sourceSchedule, removeDayPortions} from "./overnight.js";
 import { openGridOptions } from "./grid-options.js";
 import { projectsHtml, bindProjects, projectOptions } from "./projects.js";
 import "./history.css";
@@ -37,16 +40,31 @@ const localMode = import.meta.env.VITE_STORAGE === "local";
 const repo = new Repository(
   localMode ? new LocalStorageAdapter() : new BackendAdapter(),
 );
+let timePreview = null;
+const appNow = () => new Date(timePreview ?? data?.timeControl?.pausedAt ?? Date.now());
 const today = () => {
-  const d = new Date();
+  const d = appNow();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+const selectedDateKey = 'jornada.selectedDate';
+function restoreSelectedDate() {
+  try {
+    const saved = localStorage.getItem(selectedDateKey);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(saved || '') &&
+        new Date(`${saved}T12:00:00Z`).toISOString().slice(0,10) === saved) return saved;
+  } catch {}
+  return today();
+}
+function setSelectedDate(value) {
+  date = value;
+  try { localStorage.setItem(selectedDateKey,value); } catch {}
+}
 const fields = {
-  tasks: ["code", "estimate", "priority", "name", "projectId"],
+  tasks: ["code", "estimate", "priority", "name", "projectId", "start", "end"],
   blocks: ["refs", "description", "start", "end"],
 };
 const labels = {
-  tasks: ["Identificador", "Duración", "Prioridad", "Descripción", "Proyecto"],
+  tasks: ["Identificador", "Duración", "Prioridad", "Descripción", "Proyecto", "Hora inicio", "Hora fin"],
   blocks: ["Tarea", "Descripción", "Hora inicio", "Hora fin"],
 };
 const esc = (value) =>
@@ -95,7 +113,7 @@ window.addEventListener("hashchange", () => {
   if (data) navigate(routeView(), false);
 });
 let data,
-  date = today(),
+  date = restoreSelectedDate(),
   mode = "plan",
   view = routeView(),
   history = [],
@@ -104,7 +122,8 @@ let data,
   suggestions = null,
   status = "Guardado",
   revision = 0,
-  lastGrid = "tasks";
+  lastGrid = "tasks",
+  overnightNavigation = null;
 const day = () => (data.days[date] ||= { plan: newDocument(), actual: null });
 const doc = () => day()[mode];
 const rows = (grid) => doc()?.[grid] || [];
@@ -114,9 +133,100 @@ const notice = (message) => {
   if (node) node.textContent = message;
 };
 function checkpoint() {
-  history.push(JSON.stringify(data));
+  history.push(JSON.stringify(canonicalWorkspace(data)));
   if (history.length > 150) history.shift();
   future = [];
+}
+function updateClock() {
+  const clockButton = document.querySelector('#app-clock');
+  const toggle = document.querySelector('#clock-toggle');
+  if (!clockButton || !toggle) return;
+  const now = appNow();
+  clockButton.textContent = `${time(now.getHours()*60+now.getMinutes())}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const paused = data?.timeControl?.pausedAt != null;
+  toggle.setAttribute('aria-label',paused ? 'Reanudar el tiempo' : 'Pausar el tiempo');
+  toggle.title = paused ? 'Reanudar el tiempo' : 'Pausar el tiempo';
+  toggle.innerHTML = paused ? '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2l9 6-9 6z" fill="currentColor"/></svg>' : '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2v12M12 2v12" stroke="currentColor" stroke-width="3"/></svg>';
+  toggle.setAttribute('aria-pressed',String(paused));
+  clockButton.closest('.app-clock').classList.toggle('paused',paused || timePreview !== null);
+}
+function applyTimeShift(from) {
+  checkpoint();
+  data = shiftAgenda(data,from,Date.now());
+  timePreview = null;
+  refreshContinuations(data);
+  if (view === 'focus') { updateClock(); refreshFocus(); }
+  else render();
+  save();
+}
+function toggleClock() {
+  if (data.timeControl?.pausedAt != null) applyTimeShift(data.timeControl.pausedAt);
+  else {
+    checkpoint();
+    data.timeControl = {pausedAt:Date.now()};
+    updateClock(); refreshFocus(); save();
+  }
+}
+async function openTimeTravel() {
+  const initial = appNow();
+  navigate('focus');
+  if (pageTransition) await pageTransition.finished;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'task-dialog time-travel-dialog';
+  dialog.setAttribute('aria-label','Control del tiempo');
+  dialog.innerHTML = `<form><h2>Control del tiempo</h2><label>Día<input name="day" type="date" value="${dateKey(initial)}" required></label><label>Hora<input name="hour" ${timeFieldAttributes()} value="${time(initial.getHours()*60+initial.getMinutes())}" required></label><p class="time-travel-hint">Scroll: 15 minutos</p><p role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">Aplicar</button></div></form>`;
+  const dayInput = dialog.querySelector('[name=day]'), hourInput = dialog.querySelector('[name=hour]');
+  const preview = () => {
+    const hour = parseTimeInput(hourInput.value,true);
+    const stamp = hour ? new Date(`${dayInput.value}T${hour}:00`).getTime() : NaN;
+    const valid = Number.isFinite(stamp);
+    dialog.querySelector('[role=alert]').textContent = valid ? '' : 'Ingresá una fecha y hora válidas.';
+    if (valid) { timePreview = stamp; updateClock(); refreshFocus(); }
+    return valid ? stamp : null;
+  };
+  dialog.querySelector('form').oninput = preview;
+  const step = amount => {
+    const stamp = preview();
+    if (stamp === null) return;
+    const target = new Date(stamp);
+    const minute = target.getHours()*60+target.getMinutes();
+    target.setHours(0,amount > 0 ? (Math.floor(minute/15)+1)*15 : (Math.ceil(minute/15)-1)*15,0,0);
+    const currentOption = new Date(initial);
+    currentOption.setSeconds(0,0);
+    if ((amount > 0 && currentOption.getTime() > stamp && currentOption < target) ||
+        (amount < 0 && currentOption.getTime() < stamp && currentOption > target))
+      target.setTime(currentOption.getTime());
+    dayInput.value = dateKey(target);
+    hourInput.value = time(target.getHours()*60+target.getMinutes());
+    preview();
+  };
+  hourInput.addEventListener('wheel',event=>{event.preventDefault();step(event.deltaY>0?-1:1);},{passive:false});
+  hourInput.onkeydown = event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {event.preventDefault();step(event.key==='ArrowDown'?-1:1);}
+  };
+  dialog.querySelector('[data-dismiss]').onclick = ()=>dialog.close();
+  dialog.onclick = event => {
+    if (event.target !== dialog) return;
+    const bounds = dialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+  };
+  dialog.onclose = ()=>{
+    document.body.classList.remove('time-travel-open');
+    timePreview = null; updateClock(); refreshFocus();
+    setTimeout(()=>dialog.remove(),200);
+  };
+  dialog.querySelector('form').onsubmit = event => {
+    event.preventDefault();
+    const stamp = preview();
+    if (stamp === null) return;
+    applyTimeShift(stamp);
+    dialog.close();
+  };
+  document.body.append(dialog);
+  document.body.classList.add('time-travel-open');
+  dialog.showModal();
+  preview();
+  hourInput.focus(); hourInput.select();
 }
 function setStatus(value) {
   status = value;
@@ -127,7 +237,7 @@ async function save() {
   const rev = ++revision;
   setStatus("Guardando…");
   try {
-    await repo.save(data);
+    await repo.save(canonicalWorkspace(data));
     if (rev === revision) setStatus("Guardado");
   } catch (error) {
     setStatus("No se pudo guardar");
@@ -181,7 +291,7 @@ function commit(fn, focus) {
   if (doc()) syncPlan(doc());
   if (mode === "actual" && doc()) registerTasks(data, doc());
   clearSelection();
-  render();
+  render(true);
   save();
   if (focus) focusCell(...focus);
 }
@@ -196,7 +306,7 @@ function undo(redo = false) {
         position: document.activeElement.selectionStart,
       }
     : null;
-  to.push(JSON.stringify(data));
+  to.push(JSON.stringify(canonicalWorkspace(data)));
   data = JSON.parse(from.pop());
   clearSelection();
   render();
@@ -252,7 +362,33 @@ function move(grid, from, to) {
     rows(grid).splice(to, 0, r);
   }, [grid, to, 0]);
 }
-function deleteRows() {
+function confirmDeleteRows() {
+  if (!selection.indices.size) return;
+  const picked = {grid:selection.grid, indices:[...selection.indices]};
+  const trigger = document.activeElement;
+  const dialog = document.createElement('dialog');
+  dialog.className = 'task-dialog';
+  dialog.setAttribute('aria-label','Eliminar tarea');
+  const names = picked.indices.map(i=>rows(picked.grid)[i]?.name || rows(picked.grid)[i]?.code || '').join(', ');
+  dialog.innerHTML = `<form><h2>Eliminar ${picked.indices.length === 1 ? 'tarea' : 'tareas'}</h2><p>${esc(names)}</p><p>Se quitará solamente la parte de esta jornada. Las horas realizadas se conservan.</p><div class="dialog-actions"><button type="button" data-dismiss autofocus>Cancelar</button><button type="submit">Eliminar</button></div></form>`;
+  dialog.querySelector('[data-dismiss]').onclick = ()=>dialog.close();
+  dialog.onclick = event => {
+    if (event.target !== dialog) return;
+    const r = dialog.getBoundingClientRect();
+    if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
+  };
+  dialog.onclose = ()=>{ setTimeout(()=>dialog.remove(),200); if (trigger?.isConnected) trigger.focus(); };
+  dialog.querySelector('form').onsubmit = event => {
+    event.preventDefault();
+    dialog.close();
+    selection.grid = picked.grid;
+    selection.indices = new Set(picked.indices);
+    deleteRows();
+  };
+  document.body.append(dialog);
+  dialog.showModal();
+}
+function deleteRows(portionOnly = true) {
   if (!selection.indices.size) return;
   const grid = selection.grid,
     at = Math.min(...selection.indices);
@@ -263,6 +399,14 @@ function deleteRows() {
           .tasks.filter((_, i) => selection.indices.has(i))
           .map((t) => t.id),
       );
+      if (portionOnly) {
+        data = removeDayPortions(data,date,removed);
+        return;
+      }
+      for (const day of Object.values(data.days)) {
+        day.plan.tasks = day.plan.tasks.filter(t=>!removed.has(t.id));
+        day.plan.blocks = day.plan.blocks.map(b=>({...b,taskIds:b.taskIds.filter(id=>!removed.has(id))})).filter(b=>b.taskIds.length || b.refsText);
+      }
       doc().blocks = doc()
         .blocks.map((b) => ({
           ...b,
@@ -270,7 +414,7 @@ function deleteRows() {
         }))
         .filter((b) => b.taskIds.length || b.refsText);
     }
-    doc()[grid] = rows(grid).filter((_, i) => !selection.indices.has(i));
+    if (grid !== "tasks") doc()[grid] = rows(grid).filter((_, i) => !selection.indices.has(i));
   });
   if (rows(grid).length) focusCell(grid, Math.min(at, rows(grid).length - 1));
   else document.querySelector(`#add-${grid}`)?.focus();
@@ -351,7 +495,7 @@ function updateView() {
     tr.classList.toggle("invalid", !!error);
     tr.title = error;
     const statusCell = tr.querySelector(".plan-status");
-    if (statusCell) statusCell.innerHTML = planStatus(r);
+    if (statusCell) statusCell.innerHTML = grid === "tasks" ? taskStatusControl(r) : planStatus(r);
     tr.querySelectorAll("input").forEach((input) =>
       input.setAttribute("aria-invalid", !!error),
     );
@@ -404,7 +548,7 @@ function updateView() {
     .querySelectorAll('[data-grid="tasks"][data-col="1"]')
     .forEach((el) => {
       if (el !== document.activeElement)
-        el.value = doc().tasks[+el.dataset.row]?.estimate || "";
+        el.value = taskValue(doc().tasks[+el.dataset.row], "estimate");
     });
   document
     .querySelectorAll('[data-grid="tasks"][data-col="4"]')
@@ -412,6 +556,9 @@ function updateView() {
       if (el !== document.activeElement)
         el.value = doc().tasks[+el.dataset.row]?.projectId || "";
     });
+  document.querySelectorAll('[data-grid="tasks"][data-col="5"], [data-grid="tasks"][data-col="6"]').forEach(el => {
+    if (el !== document.activeElement) el.value = taskValue(doc().tasks[Number(el.dataset.row)], fields.tasks[Number(el.dataset.col)]);
+  });
   const sum = totals({
     ...doc(),
     blocks: doc().blocks.filter((b) => !b.refsText),
@@ -437,8 +584,8 @@ function showSuggestions(input, all = false) {
     .filter(
       (t) => normalize(t.name).includes(query) && normalize(t.name) !== query,
     )
-    .slice(-8)
-    .reverse();
+    .sort((a,b)=>alphabetical(a.name,b.name))
+    .slice(0,8);
   if (!matches.length) return;
   suggestions = { input, matches, index: -1 };
   const popup = document.createElement("div");
@@ -501,6 +648,7 @@ function toggleTheme() {
 }
 function deriveEnds(document) {
   for (const b of document.blocks) {
+    if (b.continuation) continue;
     const tasks = resolved(document, b),
       sizes = tasks.map((t) => minutes(t.estimate));
     const n = Math.max(0, ...sizes);
@@ -509,9 +657,10 @@ function deriveEnds(document) {
       tasks.length &&
       sizes.every(Number.isFinite) &&
       n > 0 &&
-      minutes(b.start) + n < 1440
-        ? time(minutes(b.start) + n)
+      n <= 1440
+        ? time((minutes(b.start) + n) % 1440)
         : "";
+    b.endDay = b.end && minutes(b.start) + n >= 1440 ? 1 : 0;
   }
 }
 function priorityDots(b) {
@@ -524,10 +673,10 @@ function priorityControl(
   t,
   attrs = `aria-label="Prioridad de ${esc(t.code)}: ${esc(t.name)}"`,
 ) {
-  return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Baja", "Media", "Alta"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
+  return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Alta", "Baja", "Media"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
 }
 const columnOrder = (grid) =>
-  grid === "tasks" ? [2, 0, 1, 3, 4] : [0, 1, 2, 3];
+  grid === "tasks" ? [2, 0, 3, 1, 5, 6, 4] : [0, 1, 2, 3];
 function planStatus(row) {
   return row.taskIds
     .map((id) => {
@@ -549,62 +698,73 @@ function planStatus(row) {
     })
     .join("");
 }
-function gridHtml(grid) {
-  const isTask = grid === "tasks";
-  return `<div class="grid-scroll"><table data-table="${grid}" aria-label="${isTask ? "Tareas para hoy" : "Plan de trabajo"}"><colgroup>${isTask ? '<col class="grip-col"><col class="code-col"><col class="estimate-col"><col><col class="project-col">' : '<col class="grip-col"><col class="refs-col"><col><col class="time-col"><col class="time-col"><col class="status-col">'}</colgroup><thead><tr><th></th>${(isTask ? ["Tarea", "Duración", "Descripción", "Proyecto"] : ["Tarea", "Descripción", "Hora inicio", "Hora fin", "Estado"]).map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows(
-    grid,
-  )
-    .map(
-      (r, i) =>
-        `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="${grid}" data-index="${i}" aria-label="Seleccionar ${isTask ? "tarea" : "bloque"} ${i + 1}">⠿</button></td>${columnOrder(
-          grid,
-        )
-          .filter((c) => !isTask || c !== 2)
-          .map((c) => {
-            const field = fields[grid][c];
-            const value = field === "refs" ? blockReferences(r) : r[field],
-              attrs = `data-grid="${grid}" data-row="${i}" data-col="${c}" aria-label="${isTask ? "Tarea" : "Plan"} ${i + 1}: ${labels[grid][c]}"`;
-            if (field === "projectId")
-              return `<td><select ${attrs}>${projectOptions(data, value)}</select></td>`;
-            if (field === "priority")
-              return `<td class="task-priority-cell">${priorityControl(r, attrs)}</td>`;
-            const readonly =
-              grid === "blocks" &&
-              (field === "refs" || field === "description");
-            return `<td class="${field === "start" || field === "end" ? "hours" : ""} ${field === "refs" || (isTask && field === "code") ? "refs-cell" : ""}">${isTask && field === "code" ? `<span class="priority-dots">${priorityControl(r, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i + 1}: Prioridad"`)}</span>` : ""}${field === "refs" ? `<span class="priority-dots" data-block="${i}">${priorityDots(r)}</span>` : ""}<input autocomplete="off" ${attrs} value="${esc(value)}" ${readonly ? "readonly" : ""} ${["estimate", "start", "end"].includes(field) ? timeFieldAttributes(field !== "estimate") : ""} ${isTask && field === "name" ? 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"' : ""}></td>`;
-          })
-          .join(
-            "",
-          )}${isTask ? "" : `<td class="plan-status">${planStatus(r)}</td>`}</tr>`,
-    )
-    .join(
-      "",
-    )}</tbody></table></div>${isTask ? '<button class="add" id="add-tasks">+ Tarea</button>' : ""}`;
+function taskSchedule(t) {
+  return doc().blocks.find(row => row.taskIds.includes(t.id));
 }
+function taskValue(t, field) {
+  if (!t) return '';
+  const row = taskSchedule(t);
+  if (field === 'estimate' && (row?.endDay || row?.continuation))
+    return time(row.continuation ? minutes(row.end) : 1440 - minutes(row.start));
+  if (field === 'end' && row?.endDay) return '24:00';
+  return ['start', 'end'].includes(field) ? row?.[field] || '' : t[field] || '';
+}
+function taskStatusControl(t) {
+  const row = taskSchedule(t);
+  const icon = planStatus({...row,taskIds:[t.id]});
+  if (row?.focusStates?.[t.id] === 'finished') return icon;
+  return `<button class="status-trigger" data-task-status="${esc(t.id)}" aria-label="Cambiar estado de ${esc(t.code)}" aria-haspopup="listbox">${icon}</button>`;
+}
+function changeTaskStatus(t, state) {
+  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+  if (!row || row.focusStates?.[t.id] === 'finished') return;
+  if (state === 'finished' && (!clock(row.start) || !clock(row.end) || endMinute(row) <= minutes(row.start))) {
+    notice('Indicá un horario válido antes de completar la tarea.');
+    return;
+  }
+  commit(() => {
+    if (state === 'finished') recordFocusWork(key, row, t, row.end);
+    if (state === 'pending') delete (row.focusStates ||= {})[t.id];
+    else (row.focusStates ||= {})[t.id] = state;
+  });
+}
+function gridHtml(grid) {
+  return `<div class="grid-scroll"><table data-table="tasks" class="day-grid" aria-label="Tareas de la jornada"><colgroup><col class="grip-col"><col class="status-col"><col class="code-col"><col><col class="estimate-col"><col class="time-col"><col class="time-col"><col class="project-col"><col class="delete-col"></colgroup><thead><tr>${['', 'Estado', 'Tarea', 'Descripción', 'Duración', 'Hora inicio', 'Hora fin', 'Proyecto', ''].map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows('tasks').map((t,i) => `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="tasks" data-index="${i}" aria-label="Seleccionar tarea ${i+1}">⠿</button></td><td class="plan-status">${taskStatusControl(t)}</td>${[0,3,1,5,6,4].map(c => {
+    const field = fields.tasks[c];
+    const attrs = `data-grid="tasks" data-row="${i}" data-col="${c}" aria-label="Tarea ${i+1}: ${labels.tasks[c]}"`;
+    if(field === 'projectId') return `<td><select ${attrs}>${projectOptions(data,t.projectId)}</select></td>`;
+    return `<td class="${c===0?'refs-cell':[1,5,6].includes(c)?'hours':''}">${c===0?`<span class="priority-dots">${priorityControl(t, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i+1}: Prioridad"`)}</span>`:''}<input ${attrs} value="${esc(taskValue(t,field))}" ${[1,5,6].includes(c)?timeFieldAttributes(c===6?'end':c!==1): 'autocomplete="off"'} ${field==='name'?'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"':''}></td>`;
+  }).join('')}<td><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
+}
+
 function activeFocus() {
-  const now = new Date();
+  const now = appNow();
   const current =
     now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   const plan = data.days[today()]?.plan;
   const active = new Map();
-  for (const b of plan?.blocks || []) {
-    if (!clock(b.start) || !clock(b.end) || b.refsText) continue;
-    const start = minutes(b.start) * 60,
-      end = minutes(b.end) * 60;
+  for (const key of [shiftDate(today(),-1),today()]) {
+  const source = data.days[key]?.plan;
+  for (const b of source?.blocks || []) {
+    if (b.continuation || (key !== today() && !b.endDay) || !clock(b.start) || !clock(b.end) || b.refsText) continue;
+    const offset = key === today() ? 0 : -86400;
+    const start = minutes(b.start) * 60 + offset,
+      end = endMinute(b) * 60 + offset;
     if (start > current || end <= start) continue;
-    for (const t of resolved(plan, b)) {
+    for (const t of resolved(source, b)) {
       if (b.focusStates?.[t.id]) continue;
       const previous = active.get(t.id);
       if (!previous || end > previous.end)
         active.set(t.id, {
           task: t,
           block: b,
-          date: today(),
+          date: key,
           start,
           end,
           current,
         });
     }
+  }
   }
   const order = plan?.focusOrder || [];
   const rank = (id) => (order.includes(id) ? order.indexOf(id) : order.length);
@@ -619,7 +779,7 @@ function activeFocus() {
   return [...groups.values()].flat();
 }
 function upcomingFocus() {
-  const now = new Date(),
+  const now = appNow(),
     horizon = new Date(now.getTime() + 3 * 3600000);
   const result = [];
   for (const offset of [0, 1]) {
@@ -632,7 +792,7 @@ function upcomingFocus() {
         !clock(b.start) ||
         !clock(b.end) ||
         b.refsText ||
-        minutes(b.end) <= minutes(b.start)
+        b.continuation || endMinute(b) <= minutes(b.start)
       )
         continue;
       const start = new Date(`${key}T${b.start}:00`);
@@ -677,7 +837,7 @@ function extendTask(key, blockId, taskId, choose = false) {
     choose ? "Continuar tarea" : "Extender tarea",
   );
   const showExtension = () => {
-    const now = new Date();
+    const now = appNow();
     const suggested = time(
       Math.min(
         1439,
@@ -689,7 +849,7 @@ function extendTask(key, blockId, taskId, choose = false) {
     dialog.querySelector("form").onsubmit = (event) => {
       event.preventDefault();
       const end = dialog.querySelector("input").value;
-      if (!clock(end) || new Date(`${key}T${end}:00`) <= new Date()) {
+      if (!clock(end) || new Date(`${key}T${end}:00`) <= appNow()) {
         dialog.querySelector("[role=alert]").textContent =
           "Elegí una hora hh:mm posterior al momento actual.";
         return;
@@ -710,7 +870,8 @@ function extendTask(key, blockId, taskId, choose = false) {
           intentionalRepeat: true,
         });
       } else row.end = end;
-      task.estimate = time(minutes(end) - minutes(row.start));
+      task.estimate = time((minutes(end) - minutes(row.start) + 1440) % 1440);
+      deriveEnds(plan);
       dialog.close();
       refreshFocus();
       save();
@@ -752,7 +913,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   if (!original || !originalTask) return;
   const length = minutes(originalTask.estimate) || duration(original);
   const initial = new Date(
-    Math.max(Date.now(), new Date(`${key}T${original.start}:00`).getTime()) +
+    Math.max(appNow().getTime(), new Date(`${key}T${original.start}:00`).getTime()) +
       30 * 60000,
   );
   if (initial.getHours() * 60 + initial.getMinutes() + length >= 1440) {
@@ -763,7 +924,8 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   const dialog = document.createElement("dialog");
   dialog.className = "task-dialog";
   dialog.setAttribute("aria-labelledby", "postpone-title");
-  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" ${timeFieldAttributes()} required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p><p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
+  dialog.innerHTML = `<form><h2 id="postpone-title">${reconcile ? "Reprogramar tarea" : "Posponer tarea"}</h2><p>${esc(originalTask.name || originalTask.code)}</p><label>Día<input name="day" type="date" required min="${today()}" value="${initialDate}"></label><label>Hora<input name="hour" ${timeFieldAttributes()} required value="${time(initial.getHours() * 60 + initial.getMinutes())}"></label><p>Duración: ${esc(time(length))}</p>${reconcile ? `<label>Tiempo trabajado<input name="worked" ${timeFieldAttributes(false)} required value="00:00"></label>` : ""}<p class="dialog-error" role="alert"></p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit">${reconcile ? "Reprogramar" : "Posponer"}</button></div></form>`;
+  dialog.querySelector('form').oninput = () => { dialog.querySelector('[role="alert"]').textContent = ''; };
   document.body.append(dialog);
   dialog.querySelector("[data-dismiss]").onclick = () => dialog.close();
   dialog.addEventListener("click", (event) => {
@@ -791,7 +953,7 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
     if (
       !clock(start) ||
       !Number.isFinite(scheduled.getTime()) ||
-      scheduled <= new Date() ||
+      scheduled <= appNow() ||
       scheduled <= new Date(`${key}T${original.start}:00`)
     ) {
       error.textContent =
@@ -812,8 +974,18 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
         "Esta tarea cambió. Cerrá el diálogo y volvé a intentarlo.";
       return;
     }
+    const worked = reconcile ? parseTimeInput(dialog.querySelector('[name="worked"]').value) : '00:00';
+    const workedMinutes = minutes(worked || '');
+    const elapsed = Math.floor((appNow().getTime() - new Date(`${key}T${original.start}:00`).getTime()) / 60000);
+    if (reconcile && (!Number.isFinite(workedMinutes) || workedMinutes > elapsed)) {
+      error.textContent = 'Ingresá el tiempo trabajado en hh:mm, sin superar el tiempo transcurrido desde el inicio.';
+      return;
+    }
     checkpoint();
-    if (reconcile) recordFocusWork(key, original, originalTask, original.end);
+    if (reconcile && workedMinutes > 0) {
+      const finish = minutes(original.start) + workedMinutes;
+      recordFocusWork(key, original, originalTask, time(finish % 1440), finish);
+    }
     const target = (data.days[targetDate] ||= {
       plan: newDocument(),
       actual: null,
@@ -852,7 +1024,21 @@ function postponeTask(key, blockId, taskId, reconcile = false) {
   };
   dialog.showModal();
 }
-function recordFocusWork(key, b, t, end) {
+function recordFocusWork(key, b, t, end, absoluteEnd) {
+  const finish = absoluteEnd ?? (minutes(end) + (b.endDay && minutes(end) <= minutes(b.start) ? 1440 : 0));
+  for (const day of Object.values(data.days)) {
+    if (!day.actual) continue;
+    day.actual.blocks = day.actual.blocks.filter(row=>row.sourceFocus !== `${b.id}/${t.id}`);
+  }
+  for (let offset = 0; offset <= Math.floor((finish-1)/1440); offset++) {
+    const from = Math.max(minutes(b.start),offset*1440), to = Math.min(finish,(offset+1)*1440);
+    if (to <= from) continue;
+    const targetDate = shiftDate(key,offset);
+    data.days[targetDate] ||= {plan:newDocument(),actual:null};
+    recordWorkSlice(targetDate,{...b,start:time(from-offset*1440),endDay:0},t,time(to-offset*1440));
+  }
+}
+function recordWorkSlice(key, b, t, end) {
   const actual = (data.days[key].actual ||= newDocument());
   let performed = actual.tasks.find((item) => item.id === t.id);
   if (!performed) {
@@ -891,7 +1077,7 @@ function actOnFocus(button) {
   if (!b || !t || b.focusStates?.[taskId]) return;
   if (action === "definition") {
     button.closest("details").open = false;
-    date = key;
+    setSelectedDate(key);
     mode = "plan";
     navigate("day");
     const focus = () => {
@@ -918,7 +1104,7 @@ function actOnFocus(button) {
     postponeTask(key, blockId, taskId, action === "reschedule");
     return;
   }
-  const now = new Date(),
+  const now = appNow(),
     nowMinutes = now.getHours() * 60 + now.getMinutes(),
     nowTime = time(nowMinutes);
   const pending = upcomingFocus().some(
@@ -935,7 +1121,9 @@ function actOnFocus(button) {
     return;
   checkpoint();
   if (action === "finish") {
-    recordFocusWork(key, b, t, minutes(b.end) <= nowMinutes ? b.end : nowTime);
+    const elapsedDay = key === today() ? 0 : 1440;
+    const finish = Math.min(endMinute(b),nowMinutes + elapsedDay);
+    recordFocusWork(key,b,t,time(finish % 1440),finish);
     (b.focusStates ||= {})[taskId] = "finished";
   } else if (action === "cancel") {
     (b.focusStates ||= {})[taskId] = "cancelled";
@@ -992,7 +1180,7 @@ function focusHtml() {
           ? ` focus-shared${shared[0] === entry ? " focus-shared-first" : ""}${shared.at(-1) === entry ? " focus-shared-last" : ""}`
           : "";
       return `<li data-entry-key="${esc(entry.task.id)}" data-focus-id="${esc(t.id)}" data-focus-drag draggable="true" tabindex="0" class="focus-card${groupClass}">
-      <div class="focus-title"><details class="focus-menu focus-priority"><summary aria-label="Prioridad de ${esc(t.name || t.code)}"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" aria-hidden="true"></span></summary><div>${["Baja", "Media", "Alta"].map((p) => `<button data-focus-priority="${p}" aria-pressed="${p === normalizePriority(t.priority)}"><span class="priority-dot ${p.toLowerCase()}" aria-hidden="true"></span> ${p}</button>`).join("")}</div></details><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${counter}${focusMenu(entry)}</div>${progress}
+      <div class="focus-title"><details class="focus-menu focus-priority"><summary aria-label="Prioridad de ${esc(t.name || t.code)}"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" aria-hidden="true"></span></summary><div>${["Alta", "Baja", "Media"].map((p) => `<button data-focus-priority="${p}" aria-pressed="${p === normalizePriority(t.priority)}"><span class="priority-dot ${p.toLowerCase()}" aria-hidden="true"></span> ${p}</button>`).join("")}</div></details><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${counter}${focusMenu(entry)}</div>${progress}
     </li>`;
     })
     .join("")}${upcoming
@@ -1264,6 +1452,7 @@ const editing = () =>
   );
 async function pollWorkspace() {
   if (!data) return;
+  updateClock();
   refreshFocus();
   if (polling || status !== "Guardado" || editing()) return;
   polling = true;
@@ -1323,20 +1512,24 @@ function sortDayByStart(current) {
   const tasks = [...current.tasks].sort((a, b) => (starts.get(a.id) ?? Infinity) - (starts.get(b.id) ?? Infinity));
   return { blocks, tasks, changed: blocks.some((row, i) => row !== current.blocks[i]) || tasks.some((row, i) => row !== current.tasks[i]) };
 }
-function render() {
+function render(keepOrder = false) {
   isRendering = true;
   closeSuggestions();
   clearSelection();
+  refreshContinuations(data);
   const d = day();
   if (doc() && mode === "plan") {
     syncPlan(doc());
     if (mode === "plan") deriveEnds(doc());
-    const sorted = sortDayByStart(doc());
-    doc().blocks = sorted.blocks;
-    doc().tasks = sorted.tasks;
+    if (!keepOrder) {
+      const sorted = sortDayByStart(doc());
+      doc().blocks = sorted.blocks;
+      doc().tasks = sorted.tasks;
+    }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `<section><h2>Tareas para hoy:</h2>${gridHtml("tasks")}</section><section><div class="section-title"><h2>Plan de trabajo:</h2><button id="chain">Encadenar horarios</button></div>${gridHtml("blocks")}</section><div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+  document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
   isRendering = false;
@@ -1346,7 +1539,7 @@ function bind() {
   bindFocus();
   bindProjects(data, checkpoint, save);
   bindHistoryControls(historyFilters, data, (key) => {
-    date = key;
+    setSelectedDate(key);
     mode = "actual";
     navigate("day");
   });
@@ -1363,7 +1556,7 @@ function bind() {
     document.documentElement.dataset.navigation =
       value > date ? "forward" : "back";
     pageTransition?.skipTransition();
-    date = value;
+    setSelectedDate(value);
     clearSelection();
     if (
       document.startViewTransition &&
@@ -1377,6 +1570,9 @@ function bind() {
   on("nav-history", () => navigate("month"));
   on("nav-projects", () => navigate("projects"));
   on("theme", toggleTheme);
+  on("clock-toggle", toggleClock);
+  on("app-clock", openTimeTravel);
+  updateClock();
   document.querySelector("#date").onchange = (e) => {
     if (e.target.value) changeDate(e.target.value);
   };
@@ -1429,7 +1625,7 @@ function bind() {
   document.querySelectorAll("[data-date]").forEach(
     (el) =>
       (el.onclick = () => {
-        date = el.dataset.date;
+        setSelectedDate(el.dataset.date);
         mode = day().actual ? "actual" : "plan";
         navigate("day");
       }),
@@ -1437,7 +1633,7 @@ function bind() {
   bindGrids();
   on("export", () => {
     const url = URL.createObjectURL(
-        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+        new Blob([JSON.stringify(canonicalWorkspace(data), null, 2)], { type: "application/json" }),
       ),
       a = document.createElement("a");
     a.href = url;
@@ -1502,6 +1698,22 @@ function bindGrids() {
       true,
     );
     plan.onclick = (event) => {
+      const status = event.target.closest('[data-task-status]');
+      if (status) {
+        const t = doc().tasks.find(t => t.id === status.dataset.taskStatus);
+        if (t) openGridOptions(status, '', [
+          {label:'Programada', choose:()=>changeTaskStatus(t,'pending')},
+          {label:'Completada', choose:()=>changeTaskStatus(t,'finished')},
+          {label:'Cancelada', choose:()=>changeTaskStatus(t,'cancelled')},
+        ]);
+        return;
+      }
+      const trash = event.target.closest('[data-delete-task]');
+      if (trash) {
+        const index = doc().tasks.findIndex(t => t.id === trash.dataset.deleteTask);
+        if (index >= 0) { select('tasks',index); confirmDeleteRows(); }
+        return;
+      }
       const button = event.target.closest("[data-plan-priority]");
       if (!button) return;
       const t = doc().tasks.find((item) => item.id === button.dataset.taskId);
@@ -1541,10 +1753,22 @@ function bindGrids() {
     let previousDraft = el.value;
     const timed = ["estimate", "start", "end"].includes(field);
     const finishTime = () => {
-      const value = parseTimeInput(el.value, field !== "estimate");
+      if (isRendering || !el.isConnected) return false;
+      const value = parseTimeInput(el.value, field !== "estimate", field === "end");
       if (value !== null) applyTimeEdit(grid, i, field, value);
-      el.value = rows(grid)[i]?.[field] || "";
+      el.value = overnightNavigation ? value : grid === "tasks" ? taskValue(rows(grid)[i], field) : rows(grid)[i]?.[field] || "";
       previousDraft = el.value;
+      if (overnightNavigation) {
+        const destination = overnightNavigation;
+        overnightNavigation = null;
+        queueMicrotask(() => {
+          const show = () => { setSelectedDate(destination); render(); save(); };
+          if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+            document.startViewTransition(show);
+          else show();
+        });
+        return true;
+      }
     };
     el.onblur = () => {
       closeSuggestions();
@@ -1564,7 +1788,7 @@ function bindGrids() {
         const complete =
           raw === "" || /^\d{1,2}:\d{2}$/.test(raw) || /^\d{4}$/.test(raw);
         if (complete) {
-          const value = parseTimeInput(raw, field !== "estimate");
+          const value = parseTimeInput(raw, field !== "estimate", field === "end");
           if (value === null || !applyTimeEdit(grid, i, field, value)) {
             el.value = previousDraft;
             return;
@@ -1599,7 +1823,10 @@ function bindGrids() {
       updateView();
       save();
     };
-    el.onkeydown = gridKey;
+    el.onkeydown = event => {
+      if (timed && event.key === 'Enter' && finishTime()) { event.preventDefault(); return; }
+      gridKey(event);
+    };
   });
   let dragging = null;
   document.querySelectorAll("[data-handle]").forEach((el) => {
@@ -1629,33 +1856,6 @@ function bindGrids() {
     };
   });
   document.querySelectorAll("[data-table] tbody tr").forEach((el) => {
-    if (el.closest('table').dataset.table === 'blocks') {
-      const clearHover = () => document.querySelectorAll('.linked-task-hover').forEach(row => row.classList.remove('linked-task-hover'));
-      el.onpointerenter = () => {
-        clearHover();
-        const block = doc()?.blocks[Number(el.dataset.index)];
-        if (!block) return;
-        el.classList.add('linked-task-hover');
-        document.querySelectorAll('[data-table="tasks"] tbody tr').forEach(row => {
-          const task = doc().tasks[Number(row.dataset.index)];
-          row.classList.toggle('linked-task-hover', !!task && block.taskIds.includes(task.id));
-        });
-      };
-      el.onpointerleave = clearHover;
-    } else if (el.closest('table').dataset.table === 'tasks') {
-      const clearHover = () => document.querySelectorAll('.linked-task-hover').forEach(row => row.classList.remove('linked-task-hover'));
-      el.onpointerenter = () => {
-        clearHover();
-        const task = doc()?.tasks[Number(el.dataset.index)];
-        if (!task) return;
-        el.classList.add('linked-task-hover');
-        document.querySelectorAll('[data-table="blocks"] tbody tr').forEach(row => {
-          const block = doc().blocks[Number(row.dataset.index)];
-          row.classList.toggle('linked-task-hover', !!block && block.taskIds.includes(task.id));
-        });
-      };
-      el.onpointerleave = clearHover;
-    }
     el.ondragover = (e) => {
       if (dragging?.grid === el.closest("table").dataset.table)
         e.preventDefault();
@@ -1667,13 +1867,13 @@ function bindGrids() {
       dragging = null;
     };
   });
-  const planTable = document.querySelector('[data-table="blocks"]');
+  const planTable = document.querySelector('[data-table="tasks"]');
   if (planTable)
     planTable.addEventListener("focusout", (event) => {
       if (
         isRendering ||
         !planTable.isConnected ||
-        planTable.contains(event.relatedTarget)
+        planTable.contains(event.relatedTarget) || event.relatedTarget?.closest('.grid-options')
       )
         return;
       const current = doc();
@@ -1691,7 +1891,6 @@ function bindGrids() {
       current.blocks = sorted.blocks;
       current.tasks = sorted.tasks;
       clearSelection();
-      planTable.parentElement.outerHTML = gridHtml("blocks");
       document.getElementById('add-tasks')?.remove();
       document.querySelector('[data-table="tasks"]').parentElement.outerHTML = gridHtml('tasks');
       document.getElementById('add-tasks').onclick = () => add('tasks');
@@ -1707,9 +1906,48 @@ function bindGrids() {
       save();
     });
 }
+function syncCompletedTime(key, row, task, previousId = row?.id) {
+  if (row?.focusStates?.[task.id] !== 'finished' || !clock(row.start) || !clock(row.end) || endMinute(row) <= minutes(row.start)) return;
+  if (previousId !== row.id) for (const day of Object.values(data.days)) {
+    if (day.actual) day.actual.blocks = day.actual.blocks.filter(block=>block.sourceFocus !== `${previousId}/${task.id}`);
+  }
+  recordFocusWork(key,row,task,row.end);
+}
 function applyTimeEdit(grid, index, field, value) {
+  if (grid === 'tasks' && ['start', 'end'].includes(field)) {
+    const task = rows(grid)[index];
+    const displayed = taskSchedule(task);
+    const {row:scheduled,key:sourceDate} = sourceSchedule(data,date,displayed);
+    if (!scheduled) return false;
+    if (field === 'end' && value && (!clock(scheduled.start) || minutes(value) === minutes(scheduled.start))) {
+      notice('El fin debe ser posterior al inicio.');
+      return false;
+    }
+    if (taskValue(task,field) === value && !overnightNavigation) return true;
+    checkpoint();
+    let target = scheduled;
+    if (scheduled.taskIds.length > 1) {
+      target = {...structuredClone(scheduled), id:uid(), taskIds:[task.id]};
+      scheduled.taskIds = scheduled.taskIds.filter(id => id !== task.id);
+      data.days[sourceDate].plan.blocks.push(target);
+    }
+    target[field] = value;
+    if (field === 'end') {
+      const length = value ? (value === '24:00' ? 1440-minutes(target.start) : (minutes(value) - minutes(target.start) + 1440) % 1440) : 0;
+      task.estimate = value ? time(length) : '';
+      target.endDay = value && (value === '24:00' || minutes(value) < minutes(target.start)) ? 1 : 0;
+      if (target.endDay && value !== '24:00' && value !== '00:00' && !displayed.continuation) overnightNavigation = shiftDate(sourceDate);
+    }
+    deriveEnds(data.days[sourceDate].plan);
+    syncCompletedTime(sourceDate,target,task,scheduled.id);
+    if (displayed.continuation) { displayed.end = target.end; displayed.focusStates = target.focusStates; }
+    updateView();
+    save();
+    return true;
+  }
   const r = rows(grid)[index];
   if (!r) return false;
+  if (grid === "tasks" && field === "estimate" && taskValue(r,field) === value) return true;
   if (
     field === "end" &&
     value &&
@@ -1720,7 +1958,14 @@ function applyTimeEdit(grid, index, field, value) {
   }
   if (r[field] === value) return true;
   checkpoint();
-  r[field] = value;
+  if (grid === 'tasks' && field === 'estimate') {
+    const shown = taskSchedule(r);
+    const source = sourceSchedule(data,date,shown);
+    r.estimate = value && shown?.continuation ? time(1440-minutes(source.row.start)+minutes(value)) : value;
+    deriveEnds(data.days[source.key].plan);
+    syncCompletedTime(source.key,source.row,r);
+    if (shown?.continuation) shown.end = source.row.end;
+  } else r[field] = value;
   if (field === "end")
     for (const t of resolved(doc(), r))
       t.estimate = value ? time(minutes(value) - minutes(r.start)) : "";
@@ -1735,6 +1980,28 @@ function gridKey(e) {
   const grid = e.target.dataset.grid,
     i = +e.target.dataset.row,
     c = +e.target.dataset.col;
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    closeSuggestions();
+    const order = columnOrder(grid);
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown')
+      focusCell(grid, Math.max(0,Math.min(rows(grid).length-1,i+(e.key==='ArrowDown'?1:-1))),c);
+    else focusCell(grid,i,order[Math.max(0,Math.min(order.length-1,order.indexOf(c)+(e.key==='ArrowRight'?1:-1)))]);
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.startsWith('Arrow')) {
+    const input = e.target;
+    const collapsed = input.selectionStart === input.selectionEnd;
+    const boundary = collapsed && ((e.key === 'ArrowLeft' && input.selectionStart === 0) ||
+      (e.key === 'ArrowRight' && input.selectionEnd === input.value?.length));
+    if (boundary) {
+      e.preventDefault();
+      closeSuggestions();
+      const order = columnOrder(grid);
+      focusCell(grid,i,order[Math.max(0,Math.min(order.length-1,order.indexOf(c)+(e.key==='ArrowRight'?1:-1)))]);
+    }
+    return;
+  }
   const optionsControl = e.target.matches('select, summary');
   if (optionsControl && e.target.closest('details')?.open && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
     e.preventDefault();
@@ -1897,7 +2164,7 @@ function importDefinitions(incoming) {
   return mapping;
 }
 document.addEventListener("keydown", (e) => {
-  if (view !== "day" || mode === "actual") return;
+  if (view !== "day" || mode === "actual" || document.querySelector("dialog[open]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -1913,7 +2180,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (selection.indices.size && ["Delete", "Backspace"].includes(e.key)) {
     e.preventDefault();
-    deleteRows();
+    confirmDeleteRows();
   }
   if (e.key === "Escape") {
     document.querySelectorAll(".plan-priority[open]").forEach((menu) => {
@@ -1934,7 +2201,7 @@ for (const type of ["copy", "cut"])
       "application/x-jornada",
       JSON.stringify({
         grid,
-        rows: picked,
+        rows: grid === 'tasks' ? picked.map(t => ({...t,start:taskValue(t,'start'),end:taskValue(t,'end')})) : picked,
         tasks: doc().tasks,
         cut: type === "cut",
         sourceDate: date,
@@ -1950,20 +2217,20 @@ for (const type of ["copy", "cut"])
       "text/plain",
       picked
         .map((r) =>
-          fields[grid]
+          (grid === 'tasks' ? ['code','name','estimate','start','end','projectId'] : fields[grid])
             .map((field) =>
               (field === "refs"
                 ? blockReferences(r)
                 : field === "projectId"
                   ? data.projects?.find((p) => p.id === r.projectId)?.name || ""
-                  : r[field] || ""
+                  : grid === 'tasks' ? taskValue(r,field) : r[field] || ""
               ).replace(/[\t\r\n]/g, " "),
             )
             .join("\t"),
         )
         .join("\n"),
     );
-    if (type === "cut") deleteRows();
+    if (type === "cut") deleteRows(false);
   });
 document.addEventListener("paste", (e) => {
   if (view !== "day" || mode === "actual" || !doc()) return;
@@ -2039,7 +2306,7 @@ document.addEventListener("paste", (e) => {
           const values = line.split("\t"),
             r =
               grid === "tasks" ? task([...doc().tasks, ...incoming]) : block();
-          fields[grid].forEach((field, i) => {
+          (grid === 'tasks' && !/^\d{1,2}:\d{2}$/.test(values[1] || '') ? (values.length >= 6 ? ['code','name','estimate','start','end','projectId'] : ['code','name','start','end','projectId']) : fields[grid]).forEach((field, i) => {
             if (values[i] === undefined) return;
             if (field === "projectId")
               r.projectId =
@@ -2071,6 +2338,16 @@ document.addEventListener("paste", (e) => {
         t.estimate = Number.isFinite(minutes(t.estimate))
           ? time(minutes(t.estimate))
           : "";
+        if (t.start && !parsed?.cut) {
+          const start = parseTimeInput(t.start,true);
+          const end = parseTimeInput(t.end || '',true);
+          if (start && end && minutes(end)>minutes(start)) {
+            t.estimate = time(minutes(end)-minutes(start));
+            doc().blocks.push({...block(),taskIds:[t.id],start,end,description:t.name});
+          }
+        }
+        delete t.start;
+        delete t.end;
       }
     if (grid === "blocks") {
       const incomingIds = new Set(incoming.flatMap((b) => b.taskIds));

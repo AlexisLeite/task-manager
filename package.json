@@ -10,7 +10,8 @@
     "test:unit": "node --test unit/*.test.js",
     "start": "node server/index.js",
     "seed": "node server/seed.js",
-    "test:backend": "npm run build && playwright test -c playwright.backend.config.js"
+    "test:backend": "npm run build && playwright test -c playwright.backend.config.js",
+    "test:time-control": "playwright test -c playwright.time-control.config.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

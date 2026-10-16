@@ -170,6 +170,7 @@ test("una tarea vencida permanece y permite completar o reprogramar conservando 
     .click();
   await page.getByLabel("Día", { exact: true }).fill("2026-10-15");
   await page.getByLabel("Hora", { exact: true }).fill("14:00");
+  await page.getByLabel("Tiempo trabajado", { exact: true }).fill("3");
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Reprogramar", exact: true })

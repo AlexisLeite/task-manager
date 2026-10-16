@@ -1,3 +1,4 @@
+import {alphabetical} from "./option-order.js";
 import { format, totals } from "./model.js";
 
 const escapeHtml = (value) =>
@@ -205,7 +206,7 @@ export function historyHtml(data, filters = {}) {
       <label for="history-from">Desde <input type="date" id="history-from" aria-label="Desde" value="${escapeHtml(history.from)}"></label>
       <label for="history-to">Hasta <input type="date" id="history-to" aria-label="Hasta" value="${escapeHtml(history.to)}"></label>
       <button id="history-clear">Todo el historial</button>
-      <div class="history-project-picker"><span id="history-project-label">Proyectos</span><button id="history-project-toggle" type="button" aria-labelledby="history-project-label history-project-selection" aria-expanded="false" aria-controls="history-project-popover"><span id="history-project-selection">${escapeHtml(projectFilterLabel(data, filters.projectIds))}</span><span aria-hidden="true">⌄</span></button><div id="history-project-popover" popover="auto"><button id="history-project-all" type="button">Todos los proyectos</button><div class="history-project-options">${[{ id: "", name: "Sin proyecto" }, ...(data.projects || [])].map((project) => `<label><input type="checkbox" data-history-project value="${escapeHtml(project.id)}" ${filters.projectIds?.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></div></div>
+      <div class="history-project-picker"><span id="history-project-label">Proyectos</span><button id="history-project-toggle" type="button" aria-labelledby="history-project-label history-project-selection" aria-expanded="false" aria-controls="history-project-popover"><span id="history-project-selection">${escapeHtml(projectFilterLabel(data, filters.projectIds))}</span><span aria-hidden="true">⌄</span></button><div id="history-project-popover" popover="auto"><button id="history-project-all" type="button">Todos los proyectos</button><div class="history-project-options">${[{ id: "", name: "Sin proyecto" }, ...(data.projects || [])].sort((a,b)=>alphabetical(a.name,b.name)).map((project) => `<label><input type="checkbox" data-history-project value="${escapeHtml(project.id)}" ${filters.projectIds?.includes(project.id) ? "checked" : ""}><span>${escapeHtml(project.name)}</span></label>`).join("")}</div></div></div>
     </div></div>
     <p class="history-error" role="alert" ${history.error ? "" : "hidden"}>${escapeHtml(history.error)}</p>
 

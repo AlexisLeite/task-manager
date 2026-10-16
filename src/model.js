@@ -7,8 +7,8 @@ export const minutes = (value) =>
 export const clock = (value) =>
   Number.isFinite(minutes(value)) && minutes(value) < 1440;
 export const duration = (block) =>
-  clock(block.start) && clock(block.end)
-    ? Math.max(0, minutes(block.end) - minutes(block.start))
+  clock(block.start) && (clock(block.end) || block.end === "24:00")
+    ? Math.max(0, minutes(block.end) + (block.endDay || 0) * 1440 - minutes(block.start))
     : 0;
 export const format = (n) =>
   `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
@@ -45,7 +45,7 @@ export function union(blocks) {
     total = 0;
   for (const [a, b] of blocks
     .filter(duration)
-    .map((b) => [minutes(b.start), minutes(b.end)])
+    .map((b) => [minutes(b.start), Math.min(1440, minutes(b.end) + (b.endDay || 0) * 1440)])
     .sort((a, b) => a[0] - b[0])) {
     total += Math.max(0, b - Math.max(end, a));
     end = Math.max(end, b);
@@ -106,7 +106,7 @@ export function syncPlan(doc) {
     b.description = description;
   }
 }
-export function parseTimeInput(raw, isClock = false) {
+export function parseTimeInput(raw, isClock = false, allowMidnight = false) {
   raw = raw.trim();
   if (!raw) return "";
   let value;
@@ -115,7 +115,7 @@ export function parseTimeInput(raw, isClock = false) {
     value = raw.slice(0, -2).padStart(2, "0") + ":" + raw.slice(-2);
   else if (/^\d{1,2}:[0-5]\d$/.test(raw)) value = raw.padStart(5, "0");
   else return null;
-  if (!/^\d{2}:[0-5]\d$/.test(value) || (isClock && !clock(value))) return null;
+  if (!/^\d{2}:[0-5]\d$/.test(value) || (isClock && !clock(value) && !(allowMidnight && value === "24:00"))) return null;
   return value;
 }
 export function normalizePriority(value) {

@@ -1,0 +1,26 @@
+import {test,expect} from '@playwright/test';
+test('combos y sugerencias ordenados alfabéticamente con teclado y filtro',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('jornada.v1',JSON.stringify({version:2,days:{},projects:[{id:'z',name:'Zeta'},{id:'b',name:'beta'},{id:'a',name:'Álgebra'}],tasks:[{id:'z',name:'Zoología'},{id:'b',name:'beta'},{id:'a',name:'Álgebra'}]})));
+  await page.goto('/#/jornada');
+  await page.getByRole('button',{name:'+ Tarea',exact:true}).click();
+  const project=page.getByLabel('Tarea 1: Proyecto',{exact:true});
+  await expect(project.locator('option')).toHaveText(['Álgebra','beta','Sin proyecto','Zeta']);
+  await expect(project).toHaveValue('');
+  await project.focus();await project.press('Enter');
+  await expect(page.locator('.grid-options [role=option]')).toHaveText(['Álgebra','beta','Sin proyecto','Zeta']);
+  await page.getByLabel('Filtrar opciones').fill('a');
+  await expect(page.locator('.grid-options [role=option]')).toHaveText(['Álgebra','beta','Zeta']);
+  await page.getByLabel('Filtrar opciones').press('Enter');
+  await expect(project).toHaveValue('a');
+  await page.getByLabel('Tarea 1: Prioridad',{exact:true}).press('Enter');
+  await expect(page.locator('.grid-options [role=option]')).toHaveText(['Alta','Baja','Media']);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Cambiar estado de t1',exact:true}).click();
+  await expect(page.locator('.grid-options [role=option]')).toHaveText(['Cancelada','Completada','Programada']);
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Tarea 1: Descripción',{exact:true}).press('Enter');
+  await expect(page.locator('#suggestions [role=option]')).toHaveText(['Álgebra','beta','Zoología']);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Historia',exact:true}).click();
+  await expect(page.locator('.history-project-options label')).toHaveText(['Álgebra','beta','Sin proyecto','Zeta']);
+});

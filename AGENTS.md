@@ -1,6 +1,6 @@
 # Experiencia de usuario
 
-- El trabajo realizado se genera exclusivamente mediante las acciones de Foco. La vista Realizado es de consulta: no permitir edición manual ni copiar la planificación como realizado. Conservar los registros históricos existentes.
+- El trabajo realizado se genera mediante las acciones de Foco o al marcar explícitamente una tarea programada/cancelada como completada desde Jornada (con sus horarios, incluso en fechas pasadas). La vista Realizado es de consulta: no permitir edición manual ni copiar la planificación como realizado. Conservar los registros históricos existentes.
 
 - Todos los cambios dinámicos de contenido deben animarse: inserciones, eliminaciones, reordenamientos, agrupación y separación de tareas, cambios de tamaño, filtros, menús y modales.
 - Las tareas de Foco deben desplazarse suavemente también cuando pasan a compartir horario o dejan de compartirlo. Animar los cambios de espacio y los controles que aparecen, además del movimiento de las filas.

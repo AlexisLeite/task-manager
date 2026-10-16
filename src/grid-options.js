@@ -1,12 +1,14 @@
+import {alphabetical} from "./option-order.js";
 let closeActive;
-export function openGridOptions(trigger, query = '') {
+export function openGridOptions(trigger, query = '', customOptions) {
   closeActive?.();
   const select = trigger.tagName === 'SELECT';
   const menu = trigger.closest('details');
   if (menu) menu.open = false;
-  const options = select
+  const options = customOptions || (select
     ? [...trigger.options].map(option => ({ label: option.text, choose: () => { trigger.value = option.value; trigger.dispatchEvent(new Event('input', { bubbles: true })); trigger.dispatchEvent(new Event('change', { bubbles: true })); } }))
-    : [...menu.querySelectorAll('[data-plan-priority]')].map(button => ({ label: button.textContent.trim(), choose: () => button.click() }));
+    : [...menu.querySelectorAll('[data-plan-priority]')].map(button => ({ label: button.textContent.trim(), choose: () => button.click() })));
+  options.sort((a,b)=>alphabetical(a.label,b.label));
   const popup = document.createElement('div');
   popup.className = 'grid-options';
   popup.setAttribute('popover', 'manual');

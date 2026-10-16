@@ -1,3 +1,4 @@
+import {alphabetical} from "./option-order.js";
 import autoAnimate from "@formkit/auto-animate";
 import { uid, normalize } from "./model.js";
 import "./projects.css";
@@ -108,5 +109,7 @@ export function bindProjects(data, checkpoint, save) {
 }
 
 export function projectOptions(data, selected = "") {
-  return `<option value="">Sin proyecto</option>${(data.projects || []).map((project) => `<option value="${esc(project.id)}" ${project.id === selected ? "selected" : ""}>${esc(project.name)}</option>`).join("")}`;
+  return [{id:'',name:'Sin proyecto'},...(data.projects || [])]
+    .sort((a,b)=>alphabetical(a.name,b.name))
+    .map(project=>`<option value="${esc(project.id)}" ${project.id === selected ? 'selected' : ''}>${esc(project.name)}</option>`).join('');
 }
