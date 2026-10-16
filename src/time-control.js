@@ -8,12 +8,13 @@ export function shiftAgenda(workspace, pausedAt, resumedAt) {
   const anchor = Math.min(pausedAt,resumedAt,workspace.timeControl?.pausedAt ?? Infinity);
   const pause = new Date(anchor), key = dateKey(pause);
   const jobs = [];
-  for (const sourceDate of [shiftDate(key,-1),key]) {
+  for (const sourceDate of Object.keys(data.days).filter(date=>date<=key)) {
     const plan = data.days[sourceDate]?.plan;
     for (const row of plan?.blocks || []) {
-      if (!clock(row.start) || !clock(row.end)) continue;
+      const openEnded = row.openStarted && !row.end;
+      if (!clock(row.start) || (!clock(row.end) && !openEnded)) continue;
       const end = new Date(`${sourceDate}T00:00:00`); end.setMinutes(endMinute(row));
-      if (end.getTime() <= anchor || (sourceDate !== key && !row.endDay)) continue;
+      if ((!openEnded && end.getTime() <= anchor) || (sourceDate !== key && !row.endDay && !openEnded)) continue;
       const tasks = plan.tasks.filter(task=>row.taskIds.includes(task.id) && !row.focusStates?.[task.id]);
       if (!tasks.length) continue;
       jobs.push({sourceDate,row:structuredClone(row),tasks:structuredClone(tasks)});
@@ -36,7 +37,7 @@ export function shiftAgenda(workspace, pausedAt, resumedAt) {
       plan.tasks.push(task);
     }
     const shared = data.days[sourceDate].plan.blocks.find(other=>other.id === row.id)?.taskIds.length;
-    plan.blocks.push({...row,id:shared?uid():row.id,taskIds:tasks.map(task=>task.id),start:time(start.getHours()*60+start.getMinutes()),end:time(finish.getHours()*60+finish.getMinutes()),endDay:dateKey(finish) === destination ? 0 : 1});
+    plan.blocks.push({...row,id:shared?uid():row.id,taskIds:tasks.map(task=>task.id),start:time(start.getHours()*60+start.getMinutes()),end:row.openStarted && !row.end ? '' : time(finish.getHours()*60+finish.getMinutes()),endDay:row.openStarted && !row.end ? 0 : dateKey(finish) === destination ? 0 : 1});
   }
   for (const day of Object.values(data.days)) {
     day.plan.blocks = day.plan.blocks.filter(row=>row.taskIds.length || row.refsText);

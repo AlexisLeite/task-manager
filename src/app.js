@@ -496,6 +496,10 @@ function updateView() {
     tr.title = error;
     const statusCell = tr.querySelector(".plan-status");
     if (statusCell) statusCell.innerHTML = grid === "tasks" ? taskStatusControl(r) : planStatus(r);
+    const play = tr.querySelector("[data-start-task]");
+    if (play) play.hidden = !canStartTask(r);
+    const stop = tr.querySelector("[data-stop-task]");
+    if (stop) stop.hidden = !runningGridTask(r);
     tr.querySelectorAll("input").forEach((input) =>
       input.setAttribute("aria-invalid", !!error),
     );
@@ -701,6 +705,66 @@ function planStatus(row) {
 function taskSchedule(t) {
   return doc().blocks.find(row => row.taskIds.includes(t.id));
 }
+function runningGridTask(t) {
+  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+  return activeFocus().find(entry => entry.date === key && entry.block.id === row?.id && entry.task.id === t.id);
+}
+function stopGridTask(t) {
+  const entry = runningGridTask(t);
+  if (!entry) return;
+  const action = document.createElement('button');
+  Object.assign(action.dataset, {focusAction:'finish',actionDate:entry.date,actionBlock:entry.block.id,actionTask:t.id});
+  actOnFocus(action);
+  render(true);
+}
+function canStartTask(t) {
+  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+  const state = row?.focusStates?.[t.id];
+  if (state === 'finished') return true;
+  if (state) return false;
+  return !activeFocus().some(entry => entry.date === key && entry.block.id === row?.id && entry.task.id === t.id);
+}
+function startGridTask(t) {
+  if (!canStartTask(t)) return;
+  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+  if (!row) return;
+  const original = data.days[key].plan.tasks.find(item => item.id === t.id);
+  const finished = row.focusStates?.[t.id] === 'finished';
+  const sourceFocus = `${row.id}/${t.id}`;
+  const consumed = finished ? Object.values(data.days).flatMap(day => day.actual?.blocks || [])
+    .filter(item => item.sourceFocus === sourceFocus)
+    .reduce((total,item) => total + Math.max(0,minutes(item.end)-minutes(item.start)),0) : 0;
+  const start = new Date(appNow().getTime()-consumed*60000);
+  const targetKey = dateKey(start), startMinute = start.getHours()*60+start.getMinutes();
+  const length = finished ? 0 : minutes(original.estimate);
+  commit(() => {
+    // Remove projections before moving the canonical execution to another day.
+    data = canonicalWorkspace(data);
+    const source = data.days[key].plan;
+    const current = source.blocks.find(item => item.id === row.id);
+    const moved = {...current,taskIds:[t.id],focusStates:{},start:time(startMinute),
+      end:length>0 ? time((startMinute+length)%1440) : '',
+      endDay:length>0 ? Math.floor((startMinute+length)/1440) : 0,
+      openStarted:!(length>0),pauseOffsetMs:0};
+    if (current.taskIds.length > 1) {
+      current.taskIds = current.taskIds.filter(id => id !== t.id);
+      moved.id = uid();
+      if (finished) moved.resumeSourceFocus = sourceFocus;
+    } else source.blocks = source.blocks.filter(item => item !== current);
+    const target = (data.days[targetKey] ||= {plan:newDocument(),actual:null}).plan;
+    let targetTask = target.tasks.find(item => item.id === t.id);
+    if (!targetTask) {
+      targetTask = {...original};
+      if (target.tasks.some(item => item.code === targetTask.code)) targetTask.code = nextCode(target.tasks);
+      target.tasks.push(targetTask);
+    }
+    if (finished) targetTask.estimate = '';
+    target.blocks.push(moved);
+    if (source !== target && !source.blocks.some(item => item.taskIds.includes(t.id)))
+      source.tasks = source.tasks.filter(item => item.id !== t.id);
+    setSelectedDate(targetKey);
+  });
+}
 function taskValue(t, field) {
   if (!t) return '';
   const row = taskSchedule(t);
@@ -709,9 +773,30 @@ function taskValue(t, field) {
   if (field === 'end' && row?.endDay) return '24:00';
   return ['start', 'end'].includes(field) ? row?.[field] || '' : t[field] || '';
 }
+function taskStatusIcon(t) {
+  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+  const running = activeFocus().some(entry => entry.date === key && entry.block.id === row?.id && entry.task.id === t.id);
+  if (!running) return planStatus({...row,taskIds:[t.id]});
+  return `<span class="plan-status-icon" data-status="running" role="img" aria-label="${esc(t.code)}: En ejecución" title="${esc(t.name || t.code)}: En ejecución"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5" opacity=".2"/><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5"/></svg></span>`;
+}
+function refreshGridStatus() {
+  if (view !== 'day' || mode !== 'plan') return;
+  document.querySelectorAll('[data-table="tasks"] tbody tr').forEach(tr => {
+    const t = rows('tasks')[+tr.dataset.index];
+    if (!t) return;
+    const icon = tr.querySelector('.plan-status-icon');
+    const html = taskStatusIcon(t);
+    // Replace only a changed icon; keep the status button and any edited cell focused.
+    if (icon && icon.dataset.status !== html.match(/data-status="([^"]+)"/)?.[1]) icon.outerHTML = html;
+    const play = tr.querySelector('[data-start-task]');
+    if (play) play.hidden = !canStartTask(t);
+    const stop = tr.querySelector("[data-stop-task]");
+    if (stop) stop.hidden = !runningGridTask(t);
+  });
+}
 function taskStatusControl(t) {
   const row = taskSchedule(t);
-  const icon = planStatus({...row,taskIds:[t.id]});
+  const icon = taskStatusIcon(t);
   if (row?.focusStates?.[t.id] === 'finished') return icon;
   return `<button class="status-trigger" data-task-status="${esc(t.id)}" aria-label="Cambiar estado de ${esc(t.code)}" aria-haspopup="listbox">${icon}</button>`;
 }
@@ -734,7 +819,7 @@ function gridHtml(grid) {
     const attrs = `data-grid="tasks" data-row="${i}" data-col="${c}" aria-label="Tarea ${i+1}: ${labels.tasks[c]}"`;
     if(field === 'projectId') return `<td><select ${attrs}>${projectOptions(data,t.projectId)}</select></td>`;
     return `<td class="${c===0?'refs-cell':[1,5,6].includes(c)?'hours':''}">${c===0?`<span class="priority-dots">${priorityControl(t, `data-grid="tasks" data-row="${i}" data-col="2" aria-label="Tarea ${i+1}: Prioridad"`)}</span>`:''}<input ${attrs} value="${esc(taskValue(t,field))}" ${[1,5,6].includes(c)?timeFieldAttributes(c===6?'end':c!==1): 'autocomplete="off"'} ${field==='name'?'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"':''}></td>`;
-  }).join('')}<td><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
+  }).join('')}<td><div class="task-row-actions"><button class="start-task" data-start-task="${esc(t.id)}" aria-label="Iniciar ${esc(t.code)}" title="Iniciar tarea" ${canStartTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg></button><button class="stop-task" data-stop-task="${esc(t.id)}" aria-label="Terminar ${esc(t.code)}" title="Terminar tarea" ${runningGridTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></div></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
 }
 
 function activeFocus() {
@@ -743,13 +828,14 @@ function activeFocus() {
     now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
   const plan = data.days[today()]?.plan;
   const active = new Map();
-  for (const key of [shiftDate(today(),-1),today()]) {
+  for (const key of Object.keys(data.days).filter(key=>key<=today())) {
   const source = data.days[key]?.plan;
   for (const b of source?.blocks || []) {
-    if (b.continuation || (key !== today() && !b.endDay) || !clock(b.start) || !clock(b.end) || b.refsText) continue;
-    const offset = key === today() ? 0 : -86400;
+    const openEnded = b.openStarted && !b.end;
+    if (b.continuation || (key !== today() && !b.endDay && !openEnded) || !clock(b.start) || (!clock(b.end) && !openEnded) || b.refsText) continue;
+    const offset = (new Date(`${key}T00:00:00`)-new Date(`${today()}T00:00:00`))/1000;
     const start = minutes(b.start) * 60 + offset,
-      end = endMinute(b) * 60 + offset;
+      end = openEnded ? Infinity : endMinute(b) * 60 + offset;
     if (start > current || end <= start) continue;
     for (const t of resolved(source, b)) {
       if (b.focusStates?.[t.id]) continue;
@@ -762,6 +848,7 @@ function activeFocus() {
           start,
           end,
           current,
+          openEnded,
         });
     }
   }
@@ -788,6 +875,13 @@ function upcomingFocus() {
     const key = `${dayDate.getFullYear()}-${String(dayDate.getMonth() + 1).padStart(2, "0")}-${String(dayDate.getDate()).padStart(2, "0")}`;
     const plan = data.days[key]?.plan;
     for (const b of plan?.blocks || []) {
+      if (offset === 0 && !b.end && !b.openStarted && !b.continuation) {
+        for (const t of resolved(plan,b)) {
+          if (t.estimate || b.focusStates?.[t.id]) continue;
+          result.push({block:b,date:key,task:t,start:Infinity,label:b.start,key:`next-${key}-${b.id}-${t.id}`,openEnded:true});
+        }
+        continue;
+      }
       if (
         !clock(b.start) ||
         !clock(b.end) ||
@@ -819,8 +913,8 @@ function focusMenu(entry, pending = false) {
       pending ? "start" : "finish",
       pending ? "Iniciar tarea" : "Terminar tarea",
     ],
-    ...(!pending ? [["extend", "Extender tarea"]] : []),
-    ["postpone", "Posponer tarea"],
+    ...(!pending && !entry.openEnded ? [["extend", "Extender tarea"]] : []),
+    ...(!entry.openEnded ? [["postpone", "Posponer tarea"]] : []),
     ["cancel", "Cancelar tarea"],
   ];
   return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div>${actions.map(([action, label]) => `<button data-focus-action="${action}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${label}</button>${action === "definition" ? '<hr role="separator">' : ""}`).join("")}</div></details>`;
@@ -1028,7 +1122,7 @@ function recordFocusWork(key, b, t, end, absoluteEnd) {
   const finish = absoluteEnd ?? (minutes(end) + (b.endDay && minutes(end) <= minutes(b.start) ? 1440 : 0));
   for (const day of Object.values(data.days)) {
     if (!day.actual) continue;
-    day.actual.blocks = day.actual.blocks.filter(row=>row.sourceFocus !== `${b.id}/${t.id}`);
+    day.actual.blocks = day.actual.blocks.filter(row=>row.sourceFocus !== `${b.id}/${t.id}` && (!b.resumeSourceFocus || row.sourceFocus !== b.resumeSourceFocus));
   }
   for (let offset = 0; offset <= Math.floor((finish-1)/1440); offset++) {
     const from = Math.max(minutes(b.start),offset*1440), to = Math.min(finish,(offset+1)*1440);
@@ -1121,8 +1215,15 @@ function actOnFocus(button) {
     return;
   checkpoint();
   if (action === "finish") {
-    const elapsedDay = key === today() ? 0 : 1440;
-    const finish = Math.min(endMinute(b),nowMinutes + elapsedDay);
+    const elapsedDay = Math.round((new Date(`${today()}T00:00:00`)-new Date(`${key}T00:00:00`))/60000);
+    const openEnded = b.openStarted && !b.end;
+    const finish = openEnded ? nowMinutes+elapsedDay : Math.min(endMinute(b),nowMinutes + elapsedDay);
+    if (openEnded) {
+      b.end = nowTime;
+      b.endDay = Math.floor(finish/1440);
+      t.estimate = time(Math.max(0,finish-minutes(b.start)));
+      b.openStarted = false;
+    }
     recordFocusWork(key,b,t,time(finish % 1440),finish);
     (b.focusStates ||= {})[taskId] = "finished";
   } else if (action === "cancel") {
@@ -1135,16 +1236,21 @@ function actOnFocus(button) {
       d.plan.tasks.push(target);
     }
     const length = minutes(t.estimate) || minutes(b.end) - minutes(b.start);
+    const openEnded = !Number.isFinite(length) || length <= 0;
     if (key === today() && b.taskIds.length === 1) {
       b.start = nowTime;
-      b.end = time(Math.min(1439, nowMinutes + length));
+      b.end = openEnded ? '' : time((nowMinutes+length)%1440);
+      b.endDay = !openEnded && nowMinutes+length>=1440 ? 1 : 0;
+      b.openStarted = openEnded;
     } else {
       (b.focusStates ||= {})[taskId] = "started";
       d.plan.blocks.push({
         ...block(),
         taskIds: [target.id],
         start: nowTime,
-        end: time(Math.min(1439, nowMinutes + length)),
+        end: openEnded ? '' : time((nowMinutes+length)%1440),
+        endDay: !openEnded && nowMinutes+length>=1440 ? 1 : 0,
+        openStarted:openEnded,
         description: target.name,
         intentionalRepeat: true,
       });
@@ -1167,13 +1273,15 @@ function focusHtml() {
       );
       const expired = entry.current >= entry.end;
       const progress =
-        !expired && shared.at(-1) === entry
+        !entry.openEnded && !expired && shared.at(-1) === entry
           ? `<div class="focus-progress" role="progressbar" aria-label="Tiempo restante de ${esc(shared.map(({ task }) => task.name || task.code).join(", "))}" aria-valuemin="0" aria-valuemax="100"><div></div></div>`
           : "";
-      const counter = expired
+      const counter = entry.openEnded
+        ? '<time data-focus-counter aria-label="Tiempo transcurrido"></time>'
+        : expired
         ? `<span class="focus-expired-actions"><button data-focus-action="finish" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Completa</button><span aria-hidden="true">|</span><button data-focus-action="continue" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}">Continuar</button></span>`
         : progress
-          ? '<time aria-label="Tiempo restante"></time>'
+          ? '<time data-focus-counter aria-label="Tiempo restante"></time>'
           : "";
       const groupClass =
         shared.length > 1
@@ -1186,7 +1294,7 @@ function focusHtml() {
     .join("")}${upcoming
     .map((entry) => {
       const { task: t, label, key } = entry;
-      return `<li class="focus-card focus-upcoming" data-entry-key="${esc(key)}"><div class="focus-title"><span class="upcoming-priority"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" role="img" aria-label="Prioridad ${normalizePriority(t.priority)}"></span></span><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining"><time aria-label="Horario previsto">${esc(label)} - ${esc(entry.block.end)}</time>${focusMenu(entry, true)}</div></li>`;
+      return `<li class="focus-card focus-upcoming" data-entry-key="${esc(key)}"><div class="focus-title"><span class="upcoming-priority"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" role="img" aria-label="Prioridad ${normalizePriority(t.priority)}"></span></span><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${entry.openEnded ? "" : `<time aria-label="Horario previsto">${esc(label)} - ${esc(entry.block.end)}</time>`}<button class="focus-start" data-focus-action="start" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(t.id)}" aria-label="Iniciar ${esc(t.name || t.code)}" title="Iniciar tarea"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 2l9 6-9 6z" fill="currentColor"/></svg></button>${focusMenu(entry, true)}</div></li>`;
     })
     .join(
       "",
@@ -1243,11 +1351,12 @@ function refreshFocus() {
           incomingActions.cloneNode(true),
         );
       const currentTime = el.querySelector(
-        'time[aria-label="Tiempo restante"]',
+        'time[data-focus-counter]',
       );
       const incomingTime = fresh.querySelector(
-        'time[aria-label="Tiempo restante"]',
+        'time[data-focus-counter]',
       );
+      if (currentTime && incomingTime) currentTime.setAttribute('aria-label',incomingTime.getAttribute('aria-label'));
       if (currentTime && !incomingTime) currentTime.remove();
       else if (!currentTime && incomingTime)
         el.querySelector(".focus-remaining").prepend(
@@ -1291,8 +1400,8 @@ function refreshFocus() {
     previous = el;
   }
   node.querySelectorAll("[data-focus-id]").forEach((el, i) => {
-    const { start, end, current } = active[i],
-      remaining = end - current;
+    const { start, end, current, openEnded } = active[i],
+      remaining = openEnded ? Math.max(0,current-start) : end - current;
     const counter = el.querySelector("time");
     if (counter)
       counter.textContent = [
@@ -1317,7 +1426,7 @@ function reorderFocus(id, target) {
     return;
   checkpoint();
   order.splice(target, 0, order.splice(from, 1)[0]);
-  const plan = data.days[today()].plan;
+  const plan = (data.days[today()] ||= {plan:newDocument(),actual:null}).plan;
   plan.focusOrder = [
     ...order,
     ...(plan.focusOrder || []).filter((id) => !order.includes(id)),
@@ -1371,7 +1480,8 @@ function bindFocus() {
     if (priority) {
       const menu = priority.closest("details");
       const id = priority.closest("[data-focus-id]").dataset.focusId;
-      const t = data.days[today()].plan.tasks.find((t) => t.id === id);
+      const t = activeFocus().find(entry=>entry.task.id === id)?.task;
+      if (!t) return;
       checkpoint();
       t.priority = normalizePriority(priority.dataset.focusPriority);
       menu.querySelector(".priority-dot").className =
@@ -1454,6 +1564,7 @@ async function pollWorkspace() {
   if (!data) return;
   updateClock();
   refreshFocus();
+  refreshGridStatus();
   if (polling || status !== "Guardado" || editing()) return;
   polling = true;
   const startedRevision = revision;
@@ -1706,6 +1817,18 @@ function bindGrids() {
           {label:'Completada', choose:()=>changeTaskStatus(t,'finished')},
           {label:'Cancelada', choose:()=>changeTaskStatus(t,'cancelled')},
         ]);
+        return;
+      }
+      const stop = event.target.closest('[data-stop-task]');
+      if (stop) {
+        const t = doc().tasks.find(t => t.id === stop.dataset.stopTask);
+        if (t) stopGridTask(t);
+        return;
+      }
+      const play = event.target.closest('[data-start-task]');
+      if (play) {
+        const t = doc().tasks.find(t => t.id === play.dataset.startTask);
+        if (t) startGridTask(t);
         return;
       }
       const trash = event.target.closest('[data-delete-task]');
