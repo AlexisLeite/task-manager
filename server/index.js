@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { openStore } from "./database.js";
 import { api } from "./api.js";
+import { attachDatabaseBackups } from "./backup-scheduler.js";
 
 const store = openStore(),
   root = resolve("dist");
@@ -44,13 +45,15 @@ const server = createServer((req, res) =>
   }),
 );
 const port = Number(process.env.PORT || 1111);
+const stopBackups = attachDatabaseBackups(server);
 server.listen(port, "127.0.0.1", () =>
   console.log(`Worktrack: http://127.0.0.1:${port}`),
 );
 for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, () =>
+  process.on(signal, () => {
+    stopBackups();
     server.close(() => {
       store.close();
       process.exit(0);
-    }),
-  );
+    });
+  });

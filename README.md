@@ -98,6 +98,12 @@ El seed valida el documento, lo importa íntegro y conserva una copia inicial en
 
 Los datos antiguos de localStorage no se importan automáticamente: se utiliza la exportación elegida como seed, para evitar reemplazarla con un estado viejo de otro navegador. El tema sigue guardado en `jornada.theme`.
 
+### Respaldo automático de SQLite
+
+Mientras el servidor esté iniciado (`npm run dev` o `npm start`), cada 15 minutos se genera una copia consistente de `data/worktrack.sqlite`, incluidos los cambios del WAL. Si cambió, se hace commit y push de un único archivo `worktrack.sqlite` a la rama `sqlite-backup` de `origin`. No modifica la rama de trabajo ni el staging. Requiere Git y las credenciales habituales del usuario que ejecuta el servidor; no depende de Codex ni de tareas de Windows.
+
+El respaldo corre en un proceso separado para no bloquear la aplicación, no superpone ejecuciones y se detiene al cerrar el servidor. Los errores aparecen en la consola y se reintentan en el siguiente intervalo. Las bases alternativas configuradas con `WORKTRACK_DB` no se publican. La carpeta de datos activa continúa excluida de Git; la rama de respaldo contiene una copia SQLite independiente, sin archivos WAL/SHM.
+
 ## Pruebas
 
 ```sh
