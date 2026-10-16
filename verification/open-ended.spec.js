@@ -103,6 +103,7 @@ test('play de Jornada comparte celda con eliminar y retoma sin duplicar horas',a
  const play=row.locator('[data-start-task]');
  await expect(play).toBeVisible();
  await expect(play.locator('xpath=ancestor::td').locator('[data-delete-task]')).toHaveCount(1);
+ await play.hover();
  await expect(play).toHaveCSS('color','rgb(50, 168, 82)');
  await play.click();await read(page,request);
  await expect(row.locator('[data-start-task]')).toBeHidden();
@@ -222,4 +223,83 @@ test('posponer sin duración también acepta hora hh:mm normalizada',async({page
  await dialog.getByRole('button',{name:'Posponer',exact:true}).click();
  const data=await read(page,request);
  expect(data.days['2026-10-17'].plan.blocks[0]).toMatchObject({start:'19:00',end:''});
+});
+
+test('Jornada muestra duración transcurrida sin convertirla en duración planificada',async({page,request})=>{
+ await setup(page,request);await start(page);await read(page,request);
+ await page.clock.fastForward(15*60000);
+ await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
+ const row=page.locator('tr').filter({has:page.locator('input[value="Investigar sin duración"]')});
+ const estimate=row.locator('input[data-col="1"]');
+ await expect(estimate).toHaveValue('00:15');
+ await expect(row.locator('input[data-col="6"]')).toHaveValue('');
+ await page.clock.fastForward(60000);await expect(estimate).toHaveValue('00:16');
+ await estimate.focus();await page.clock.fastForward(60000);
+ await expect(estimate).toHaveValue('00:16');await expect(estimate).toBeFocused();
+ await row.locator('input[data-col="3"]').focus();
+ await expect(estimate).toHaveValue('00:17');
+ let data=await read(page,request);
+ const task=data.days['2026-10-16'].plan.tasks.find(t=>t.name==='Investigar sin duración');
+ expect(task.estimate).toBe('');
+ expect(data.days['2026-10-16'].plan.blocks.find(b=>b.taskIds.includes(task.id)).end).toBe('');
+ await page.getByLabel('Pausar el tiempo',{exact:true}).click();
+ await page.clock.fastForward(10*60000);await expect(estimate).toHaveValue('00:17');
+ await page.getByLabel('Reanudar el tiempo',{exact:true}).click();await page.clock.runFor(1000);
+ await expect(estimate).toHaveValue('00:17');
+ await page.clock.fastForward(60000);await expect(estimate).toHaveValue('00:18');
+ await estimate.fill('1');await page.clock.fastForward(60000);await expect(estimate).toHaveValue('1');
+ await row.locator('input[data-col="3"]').focus();
+ await expect(estimate).toHaveValue('01:00');
+ await expect(row.locator('input[data-col="6"]')).toHaveValue('11:10');
+});
+
+for (const theme of ['light','dark']) test(`planning rows muted except hover focus and running: ${theme}`,async({page,request})=>{
+ await setup(page,request);
+ await page.evaluate(theme=>{localStorage.setItem('jornada.theme',theme);document.documentElement.dataset.theme=theme;},theme);
+ await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
+ const row=page.locator('tr').filter({has:page.locator('input[value="Siguiente"]')});
+ const input=row.locator('input[data-col="3"]');
+ const colors=await page.evaluate(()=>{const style=getComputedStyle(document.documentElement);return {muted:style.getPropertyValue('--muted').trim(),normal:style.getPropertyValue('--text').trim()};});
+ const rgb=hex=>`rgb(${hex.slice(1).match(/../g).map(x=>parseInt(x,16)).join(', ')})`;
+ await page.mouse.move(1,1);
+ await expect(input).toHaveCSS('color',rgb(colors.muted));
+ await expect(row.locator('summary .priority-dot')).toHaveCSS('background-color',rgb(colors.muted));
+ await expect(row.locator('[data-start-task]')).toHaveCSS('color',rgb(colors.muted));
+ await row.hover();await expect(input).toHaveCSS('color',rgb(colors.normal));
+ await expect(row.locator('[data-start-task]')).toHaveCSS('color','rgb(50, 168, 82)');
+ await input.focus();await page.mouse.move(1,1);await expect(input).toHaveCSS('color',rgb(colors.normal));
+ await page.getByRole('button',{name:'Jornada',exact:true}).focus();
+ await expect(input).toHaveCSS('color',rgb(colors.muted));
+ await page.clock.fastForward(2*60*60000);
+ await expect(row.locator('[data-status="running"]')).toBeVisible();
+ await expect(input).toHaveCSS('color',rgb(colors.normal));
+ await expect(row.locator('[data-stop-task]')).toHaveCSS('color','rgb(224, 74, 71)');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect(input).toHaveCSS('transition-duration','0s');
+});
+
+
+test('worked total includes running time once and excludes future plans',async({page,request})=>{
+ await setup(page,request);
+ await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:00 hs');
+ const rows=page.locator('.day-grid tbody tr');
+ const first=rows.filter({has:page.locator('input[value="Investigar sin duraci\u00f3n"]')});
+ const second=rows.filter({has:page.locator('input[value="Siguiente"]')});
+ await first.locator('[data-start-task]').click();await read(page,request);
+ await page.clock.fastForward(20*60000);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:20 hs');
+ await second.locator('[data-start-task]').click();await read(page,request);
+ await page.clock.fastForward(10*60000);
+ await first.locator('[data-stop-task]').click();await read(page,request);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:30 hs');
+ await page.clock.fastForward(10*60000);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:40 hs');
+ await page.getByLabel('Pausar el tiempo',{exact:true}).click();await read(page,request);
+ await page.clock.fastForward(10*60000);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:40 hs');
+ await page.getByLabel('Reanudar el tiempo',{exact:true}).click();await read(page,request);
+ await page.clock.runFor(1000);
+ await second.locator('[data-stop-task]').click();await read(page,request);
+ await expect(page.locator('#total')).toHaveText('Trabajado: 0:50 hs');
 });

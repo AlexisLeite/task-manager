@@ -51,7 +51,7 @@ test("Historia incluye todas las fechas realizadas y nunca cuenta planificación
     ["2026-10-15", "2025-12-31"],
   );
   assert.deepEqual(report.tasks, [
-    { id: "global", name: "global", minutes: 180, days: 2 },
+    { id: "global", name: "global", minutes: 180, days: 2, projectName: "Sin proyecto" },
   ]);
   assert.deepEqual(data, original);
 });
@@ -82,8 +82,8 @@ test("identidad global une aliases y solapamientos sin duplicar paralelos", () =
   const report = buildHistory(data);
   assert.equal(report.totalMinutes, 240);
   assert.deepEqual(report.tasks, [
-    { id: "global", name: "Nombre actual", minutes: 240, days: 2 },
-    { id: "other", name: "Nombre actual", minutes: 120, days: 1 },
+    { id: "global", name: "Nombre actual", minutes: 240, days: 2, projectName: "Sin proyecto" },
+    { id: "other", name: "Nombre actual", minutes: 120, days: 1, projectName: "Sin proyecto" },
   ]);
 });
 
@@ -252,7 +252,7 @@ test("Historia refleja renombres de definiciones actuales aunque se filtre una j
   };
   const report = buildHistory(data, { from: "2026-10-14", to: "2026-10-14" });
   assert.deepEqual(report.tasks, [
-    { id: "rest", name: "Descanso", minutes: 60, days: 1 },
+    { id: "rest", name: "Descanso", minutes: 60, days: 1, projectName: "Sin proyecto" },
   ]);
   const html = historyHtml(data, { from: "2026-10-14", to: "2026-10-14" });
   assert.ok(html.includes("Descanso"));

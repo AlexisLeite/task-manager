@@ -1149,3 +1149,19 @@ main {
 
 .day-grid .delete-col { width:104px; }
 .postpone-task { display:inline-flex; align-items:center; justify-content:center; padding:6px; border:0; background:transparent; color:var(--muted); }
+
+.day-grid tbody tr,
+.day-grid tbody tr :is(input, select, button, summary, .plan-status-icon, .priority-dot) {
+  transition: color 160ms ease, background-color 160ms ease;
+}
+.day-grid tbody tr:not(:has([data-status="running"])):not(:hover):not(:focus-within),
+.day-grid tbody tr:not(:has([data-status="running"])):not(:hover):not(:focus-within) :is(input, select, button, summary, .plan-status-icon) {
+  color: var(--muted);
+}
+.day-grid tbody tr:not(:has([data-status="running"])):not(:hover):not(:focus-within) .priority-dot {
+  background-color: var(--muted);
+}
+@media(prefers-reduced-motion:reduce) {
+  .day-grid tbody tr,
+  .day-grid tbody tr :is(input, select, button, summary, .plan-status-icon, .priority-dot) { transition:none; }
+}

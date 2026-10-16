@@ -106,6 +106,7 @@ export function buildHistory(
           catalog.get(definitions[0].taskId) ||
           definitions[0].name ||
           definitions[0].code,
+        projectName: data.projects?.find(project => project.id === definitions[0].projectId)?.name || "Sin proyecto",
         minutes: 0,
         days: 0,
       };
@@ -127,18 +128,24 @@ export function buildHistory(
   return result;
 }
 
+function chartPercentage(minutes, total) {
+  return new Intl.NumberFormat('es', {style:'percent',maximumFractionDigits:1}).format(total ? minutes / total : 0);
+}
+
 function projectChart(history) {
+  const total = history.projects.reduce((sum, project) => sum + project.minutes, 0);
   const highest = history.projects[0]?.minutes || 1;
-  const bars = history.projects.map(project => `<div class="history-task-bar" data-history-project-bar="${escapeHtml(project.id)}" data-minutes="${project.minutes}" title="${escapeHtml(project.name)}: ${format(project.minutes)} hs"><span class="history-task-label">${escapeHtml(project.name)}</span><span class="history-task-track"><span style="width:${project.minutes / highest * 100}%"></span></span><span class="history-task-value">${format(project.minutes)}</span></div>`).join('');
+  const bars = history.projects.map(project => `<div class="history-task-bar" data-history-project-bar="${escapeHtml(project.id)}" data-minutes="${project.minutes}" title="${escapeHtml(project.name)}: ${format(project.minutes)} hs (${chartPercentage(project.minutes,total)} de esta distribución)"><span class="history-task-label">${escapeHtml(project.name)}</span><span class="history-task-track"><span style="width:${project.minutes / highest * 100}%"></span></span><span class="history-task-value">${format(project.minutes)}</span></div>`).join('');
   return `<section class="history-chart" aria-labelledby="history-project-heading"><h2 id="history-project-heading">Distribución por proyecto</h2><div id="history-project-chart" role="img" aria-label="Distribución de horas realizadas por proyecto">${bars}</div></section>`;
 }
 
 function taskChart(history) {
+  const total = history.tasks.reduce((sum, task) => sum + task.minutes, 0);
   const highest = history.tasks[0].minutes;
   const bars = history.tasks
     .map(
       (task) =>
-        `<div class="history-task-bar" data-history-task-bar="${escapeHtml(task.id)}" data-minutes="${task.minutes}" title="${escapeHtml(task.name)}: ${format(task.minutes)} hs"><span class="history-task-label">${escapeHtml(task.name)}</span><span class="history-task-track"><span style="width:${(task.minutes / highest) * 100}%"></span></span><span class="history-task-value">${format(task.minutes)}</span></div>`,
+        `<div class="history-task-bar" data-history-task-bar="${escapeHtml(task.id)}" data-minutes="${task.minutes}" title="${escapeHtml(task.name)}: ${format(task.minutes)} hs (${chartPercentage(task.minutes,total)} de esta distribución)"><span class="history-task-label">${escapeHtml(task.name)}</span><span class="history-task-track"><span style="width:${(task.minutes / highest) * 100}%"></span></span><span class="history-task-value">${format(task.minutes)}</span></div>`,
     )
     .join("");
   return `<section class="history-chart" aria-labelledby="history-task-heading"><h2 id="history-task-heading">Distribución por tarea</h2><div id="history-task-chart" role="img" aria-labelledby="history-task-title history-task-description"><span class="visually-hidden" id="history-task-title">Distribución de horas realizadas por tarea</span><span class="visually-hidden" id="history-task-description">${history.tasks.length} tareas, de mayor a menor tiempo. Las tareas paralelas se muestran individualmente; su suma puede superar el tiempo total.</span>${bars}</div></section>`;
@@ -214,7 +221,7 @@ export function historyHtml(data, filters = {}) {
     <div class="history-section-header"><h2>Tareas realizadas</h2><button id="history-search-toggle" aria-label="Buscar tareas realizadas" aria-expanded="${!!filters.searchOpen}" aria-controls="history-search-panel"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button></div>
     <div id="history-search-panel" class="history-accordion" ${filters.searchOpen ? "" : "hidden"}><div class="history-search-inner"><input id="history-search" type="search" aria-label="Buscar tareas por nombre" placeholder="Buscar tareas…" value="${escapeHtml(filters.query || "")}"></div></div>
     <p id="history-search-empty" class="empty" ${history.tasks.length && !history.tasks.some((task) => historyMatches(task.name, filters.query)) ? "" : "hidden"}>No hay tareas que coincidan con la búsqueda.</p>
-    <div class="history-table-region"><table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${history.tasks.map((task) => `<tr data-history-task="${escapeHtml(task.id)}" ${historyMatches(task.name, filters.query) ? "" : "hidden"}><td>${escapeHtml(task.name)}</td><td>${task.days}</td><td>${format(task.minutes)} hs</td></tr>`).join("")}</tbody></table>
+    <div class="history-table-region"><table class="report" aria-label="Distribución de horas"><thead><tr><th>Tarea</th><th class="history-task-project">Proyecto</th><th>Jornadas</th><th>Horas</th></tr></thead><tbody>${history.tasks.map((task) => `<tr data-history-task="${escapeHtml(task.id)}" ${historyMatches(task.name, filters.query) ? "" : "hidden"}><td>${escapeHtml(task.name)}</td><td class="history-task-project">${escapeHtml(task.projectName)}</td><td>${task.days}</td><td>${format(task.minutes)} hs</td></tr>`).join("")}</tbody></table>
     ${!history.tasks.length && !history.error ? '<p class="empty">Sin trabajo realizado en este período.</p>' : ""}</div>
     <h2>Jornadas trabajadas</h2><div class="day-list">${history.days.map((day) => `<button data-date="${escapeHtml(day.date)}"><span>${escapeHtml(day.date)}</span><span>Realizado: ${format(day.minutes)} hs</span></button>`).join("")}</div>
     <p class="footnote">El total cuenta una sola vez los intervalos en paralelo. Las horas de cada tarea se muestran por separado.</p></div>`;

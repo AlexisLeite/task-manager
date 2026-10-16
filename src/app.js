@@ -1,5 +1,6 @@
 import {shiftAgenda,dateKey} from "./time-control.js";
 import {alphabetical} from "./option-order.js";
+import {syncRecordedProject} from './recorded-project.js';
 import {shiftDate, endMinute, canonicalWorkspace, refreshContinuations, sourceSchedule, removeDayPortions} from "./overnight.js";
 import { openGridOptions } from "./grid-options.js";
 import { projectsHtml, bindProjects, projectOptions } from "./projects.js";
@@ -24,6 +25,7 @@ import {
   task,
   nextCode,
   totals,
+  union,
   resolved,
   references,
   registerTasks,
@@ -563,15 +565,27 @@ function updateView() {
   document.querySelectorAll('[data-grid="tasks"][data-col="5"], [data-grid="tasks"][data-col="6"]').forEach(el => {
     if (el !== document.activeElement) el.value = taskValue(doc().tasks[Number(el.dataset.row)], fields.tasks[Number(el.dataset.col)]);
   });
-  const sum = totals({
-    ...doc(),
-    blocks: doc().blocks.filter((b) => !b.refsText),
-  });
-  const total = document.querySelector("#total");
-  if (total)
-    total.textContent = `${mode === "plan" ? "Planificado" : "Realizado"}: ${format(sum.work)} hs`;
+  refreshWorkedTotal();
   document.querySelector("#undo").disabled = !history.length;
   document.querySelector("#redo").disabled = !future.length;
+}
+function refreshWorkedTotal() {
+  const total = document.querySelector('#total');
+  if (!total) return;
+  const active = activeFocus();
+  const resumed = new Set(active.flatMap(entry => [
+    `${entry.block.id}/${entry.task.id}`, entry.block.resumeSourceFocus,
+  ]).filter(Boolean));
+  const actual = data.days[date]?.actual;
+  const blocks = (actual?.blocks || []).filter(row =>
+    !row.refsText && resolved(actual, row).length && !resumed.has(row.sourceFocus));
+  const offset = (new Date(`${today()}T00:00:00`) - new Date(`${date}T00:00:00`)) / 60000;
+  for (const entry of active) {
+    const start = Math.max(0, Math.floor(entry.start / 60) + offset);
+    const end = Math.min(1440, Math.floor(Math.min(entry.current, entry.end) / 60) + offset);
+    if (end > start) blocks.push({start:time(start),end:time(end)});
+  }
+  total.textContent = `Trabajado: ${format(union(blocks))} hs`;
 }
 function closeSuggestions() {
   if (suggestions) {
@@ -768,6 +782,10 @@ function startGridTask(t) {
 function taskValue(t, field) {
   if (!t) return '';
   const row = taskSchedule(t);
+  if (field === 'estimate' && mode === 'plan' && date === today()) {
+    const running = runningGridTask(t);
+    if (running?.openEnded) return time(Math.floor(Math.max(0, running.current - running.start) / 60));
+  }
   if (field === 'estimate' && (row?.endDay || row?.continuation))
     return time(row.continuation ? minutes(row.end) : 1440 - minutes(row.start));
   if (field === 'end' && row?.endDay) return '24:00';
@@ -781,6 +799,7 @@ function taskStatusIcon(t) {
 }
 function refreshGridStatus() {
   if (view !== 'day' || mode !== 'plan') return;
+  refreshWorkedTotal();
   document.querySelectorAll('[data-table="tasks"] tbody tr').forEach(tr => {
     const t = rows('tasks')[+tr.dataset.index];
     if (!t) return;
@@ -792,6 +811,11 @@ function refreshGridStatus() {
     if (play) play.hidden = !canStartTask(t);
     const stop = tr.querySelector("[data-stop-task]");
     if (stop) stop.hidden = !runningGridTask(t);
+    const estimate = tr.querySelector('input[data-col="1"]');
+    if (estimate && estimate !== document.activeElement) {
+      const value = taskValue(t, 'estimate');
+      if (estimate.value !== value) estimate.value = value;
+    }
   });
 }
 function taskStatusControl(t) {
@@ -1867,6 +1891,7 @@ function bindGrids() {
       c = +el.dataset.col,
       field = fields[grid][c];
     el.onfocus = () => {
+      el.dataset.focusValue = el.value;
       lastGrid = grid;
       clearSelection();
     };
@@ -1887,7 +1912,9 @@ function bindGrids() {
     const finishTime = () => {
       if (isRendering || !el.isConnected) return false;
       const value = parseTimeInput(el.value, field !== "estimate", field === "end");
-      if (value !== null) applyTimeEdit(grid, i, field, value);
+      const unchangedElapsed = grid === 'tasks' && field === 'estimate' &&
+        value === el.dataset.focusValue && runningGridTask(rows(grid)[i])?.openEnded;
+      if (value !== null && !unchangedElapsed) applyTimeEdit(grid, i, field, value);
       el.value = overnightNavigation ? value : grid === "tasks" ? taskValue(rows(grid)[i], field) : rows(grid)[i]?.[field] || "";
       previousDraft = el.value;
       if (overnightNavigation) {
@@ -1934,6 +1961,10 @@ function bindGrids() {
       const r = rows(grid)[i];
       if (field === "refs") setReferences(r, el.value);
       else r[field] = el.value;
+      if (grid === 'tasks' && field === 'projectId' && mode === 'plan') {
+        const {row} = sourceSchedule(data,date,taskSchedule(r));
+        syncRecordedProject(data,row,r);
+      }
       if (field === "name") {
         r.taskId =
           data.tasks.find(

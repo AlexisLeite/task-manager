@@ -338,3 +338,32 @@ test("el acordeón desplaza el contenido sin comprimir ni desvanecer los campos"
   await page.locator("#history-filter-toggle").click();
   await expect(page.locator("#history-date-filters")).toBeHidden();
 });
+
+
+test("history project column uses recorded assignments without changing charts", async ({page}) => {
+  const first=performed(60), second=performed(120), third=performed(180,'Other','other');
+  first.tasks[0].projectId='alpha';second.tasks[0].projectId='beta';
+  const plan=performed(60);plan.tasks[0].projectId='beta';
+  const data={version:2,tasks:[{id:'global-matrix',name:'Matriz'}],projects:[{id:'alpha',name:'Proyecto A'},{id:'beta',name:'Proyecto B'}],days:{
+    '2026-10-01':{plan,actual:first},'2026-10-02':{plan:newDocument(),actual:second},'2026-10-03':{plan:newDocument(),actual:third}
+  }};
+  await page.addInitScript(data=>localStorage.setItem('jornada.v1',JSON.stringify(data)),data);
+  await page.goto('/#/historia');
+  const table=page.locator('.history-view .report');
+  await expect(table.locator('th')).toHaveText(['Tarea','Proyecto','Jornadas','Horas']);
+  await expect(table.locator('tbody tr').filter({hasText:'Proyecto A'}).locator('td')).toHaveText(['Matriz','Proyecto A','1','1:00 hs']);
+  await expect(table.locator('tbody tr').filter({hasText:'Proyecto B'}).locator('td')).toHaveText(['Matriz','Proyecto B','1','2:00 hs']);
+  await expect(table.locator('tbody tr').filter({hasText:'Other'}).locator('td').nth(1)).toHaveText('Sin proyecto');
+  await expect(page.locator('#history-task-chart .history-task-label')).toHaveText(['Other','Matriz','Matriz']);
+  const taskBar=page.locator('[data-history-task-bar]').filter({hasText:'Other'});
+  await taskBar.hover();
+  await expect(taskBar).toHaveAttribute('title', /3:00 hs \(50\s*% de esta distribuci.n\)/);
+  const projectBar=page.locator('[data-history-project-bar="beta"]');
+  await projectBar.hover();
+  await expect(projectBar).toHaveAttribute('title', /2:00 hs \(33,3\s*% de esta distribuci.n\)/);
+  await page.getByRole('button',{name:'Filtros',exact:true}).click();
+  await page.getByLabel('Desde',{exact:true}).fill('2026-10-02');
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('[data-history-project-bar="beta"]')).toHaveAttribute('title', /40\s*% de esta distribuci.n/);
+  await expect(table.locator('tbody tr').filter({hasText:'Matriz'}).locator('td').nth(1)).toHaveText('Proyecto B');
+});

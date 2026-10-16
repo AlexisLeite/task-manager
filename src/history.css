@@ -241,3 +241,11 @@
 .history-search-inner {
   padding-bottom: 16px;
 }
+
+.history-view .report .history-task-project {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-inline: 14px;
+  width: 25%;
+}
