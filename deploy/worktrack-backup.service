@@ -1,0 +1,14 @@
+[Unit]
+Description=Respaldo local SQLite de Jornada
+After=worktrack.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /repos/work-track/scripts/backup-local.py
+UMask=0077
+ProtectSystem=strict
+ProtectHome=true
+# SQLite may need to create its WAL shared-memory file even for a read-only connection.
+ReadWritePaths=/var/lib/worktrack /var/backups/worktrack
+PrivateTmp=true
+NoNewPrivileges=true

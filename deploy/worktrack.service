@@ -1,0 +1,23 @@
+[Unit]
+Description=Jornada - work.gim.uy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=worktrack
+Group=worktrack
+WorkingDirectory=/repos/work-track
+EnvironmentFile=/etc/worktrack.env
+ExecStart=/usr/bin/node /repos/work-track/server/index.js
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/worktrack
+
+[Install]
+WantedBy=multi-user.target
