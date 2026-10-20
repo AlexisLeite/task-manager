@@ -141,6 +141,7 @@ function checkpoint() {
   future = [];
 }
 function updateClock() {
+  updatePageTitle();
   const clockButton = document.querySelector('#app-clock');
   const toggle = document.querySelector('#clock-toggle');
   if (!clockButton || !toggle) return;
@@ -847,6 +848,21 @@ function gridHtml(grid) {
   }).join('')}<td><div class="task-row-actions"><button class="start-task" data-start-task="${esc(t.id)}" aria-label="Iniciar ${esc(t.code)}" title="Iniciar tarea" ${canStartTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 4v16l14-8z"/></svg></button><button class="stop-task" data-stop-task="${esc(t.id)}" aria-label="Terminar ${esc(t.code)}" title="Terminar tarea" ${runningGridTask(t)?'':'hidden'}><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button><button class="postpone-task" data-postpone-task="${esc(t.id)}" aria-label="Posponer ${esc(t.code)}" title="Posponer tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-9 4h5m-2-2 2 2-2 2"/></svg></button><button class="delete-task" data-delete-task="${esc(t.id)}" aria-label="Eliminar ${esc(t.code)}" title="Eliminar tarea"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></div></td></tr>`).join('')}</tbody></table></div><button class="add" id="add-tasks">+ Tarea</button>`;
 }
 
+function updatePageTitle() {
+  const running = data ? activeFocus().filter(entry => entry.current < entry.end) : [];
+  const longest = running.reduce((selected, entry) =>
+    !selected || entry.current - entry.start > selected.current - selected.start ? entry : selected, null);
+  const elapsed = longest ? longest.current - longest.start : null;
+  const label = elapsed === null ? "Idle" : [
+    Math.floor(elapsed / 3600),
+    Math.floor(elapsed / 60) % 60,
+    elapsed % 60,
+  ].map(value => String(value).padStart(2, "0")).join(":");
+  const project = longest
+    ? data.projects?.find(project => project.id === longest.task.projectId)?.name || "Sin proyecto"
+    : null;
+  document.title = `Work Track - ${label}${project === null ? "" : ` - ${project}`}`;
+}
 function activeFocus() {
   const now = appNow();
   const current =
@@ -1343,6 +1359,7 @@ window.addEventListener(
   true,
 );
 function refreshFocus() {
+  updatePageTitle();
   const node = document.getElementById("focus-content");
   if (!node) return;
   const active = activeFocus();
