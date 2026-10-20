@@ -42,7 +42,14 @@ test("las tareas comparten barra solo si coinciden inicio y fin, incluso en bloq
   await expect(page.getByRole("progressbar")).toHaveCount(1);
 });
 
-test.beforeEach(async ({ request }) => {
+async function login(request) {
+  const response = await request.post("/api/login", { data: { username: "alexis", password: "alexis123" } });
+  expect(response.ok()).toBeTruthy();
+}
+
+test.beforeEach(async ({ request, context }) => {
+  await login(request);
+  await login(context.request);
   const current = await request.get("/api/workspace");
   const result = await request.put("/api/workspace", {
     headers: { "If-Match": current.headers().etag },
@@ -69,6 +76,7 @@ test("SQLite se comparte entre navegadores, persiste cambios y reconcilia desde 
     await page.evaluate(() => localStorage.getItem("jornada.v1")),
   ).toBeNull();
   const second = await browser.newContext();
+  await login(second.request);
   const other = await second.newPage();
   await other.goto("http://127.0.0.1:4174/#/jornada");
   await other.getByLabel("Fecha de jornada").fill("2026-10-15");
@@ -138,6 +146,7 @@ test("el poll actualiza un cliente abierto y difiere cambios mientras se edita",
   });
   const context = await browser.newContext();
   try {
+    await login(context.request);
     const other = await context.newPage();
     await other.goto("http://127.0.0.1:4174/#/jornada");
     await other.getByLabel("Fecha de jornada").fill("2026-10-15");
@@ -241,6 +250,7 @@ test("proyecto se guarda en SQLite y llega a otra pestaña", async ({
     saved.projects[0].id,
   );
   const context = await browser.newContext();
+  await login(context.request);
   const other = await context.newPage();
   await other.goto("http://127.0.0.1:4174/#/jornada");
   await other.getByLabel("Fecha de jornada").fill("2026-10-15");

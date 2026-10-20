@@ -1,0 +1,11 @@
+.auth-shell { min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
+.auth-card { width: min(100%, 360px); padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); animation: auth-enter 180ms ease-out; }
+.auth-card h1 { margin: 0 0 12px; font-size: 24px; }
+.auth-card > p { color: var(--muted); margin-bottom: 24px; }
+.auth-card label { display: grid; gap: 8px; margin-bottom: 18px; }
+.auth-card label:focus-within { outline: none; }
+.auth-card input { width: 100%; border: 1px solid var(--line); padding: 10px; }
+.auth-card button { width: 100%; border: 1px solid var(--accent); padding: 10px; margin-top: 6px; }
+.auth-feedback { color: var(--danger); font-size: 12px; }
+@keyframes auth-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .auth-card { animation: none; } }

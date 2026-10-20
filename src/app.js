@@ -12,6 +12,7 @@ import "./style.css";
 import { historyHtml } from "./history.js";
 import { bindHistoryControls } from "./history-interactions.js";
 import { Repository, LocalStorageAdapter, BackendAdapter } from "./storage.js";
+import { ensureSession, username, logout } from "./auth.js";
 import {
   uid,
   normalize,
@@ -1663,7 +1664,7 @@ function render(keepOrder = false) {
     }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings"><span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
@@ -1705,6 +1706,12 @@ function bind() {
   on("nav-history", () => navigate("month"));
   on("nav-projects", () => navigate("projects"));
   on("theme", toggleTheme);
+  on("logout", async () => {
+    const button = document.querySelector("#logout");
+    button.disabled = true;
+    try { await logout(repo); }
+    catch (error) { notice(error.message); button.disabled = false; }
+  });
   on("clock-toggle", toggleClock);
   on("app-clock", openTimeTravel);
   updateClock();
@@ -2563,6 +2570,7 @@ function prepareData(raw) {
   return incoming;
 }
 try {
+  if (!localMode) await ensureSession();
   data = prepareData(await repo.load());
   render();
 } catch {

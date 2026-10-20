@@ -11,13 +11,19 @@ npm install
 npm run dev
 ```
 
-Abrir http://127.0.0.1:5173. Para Console Monitor: `npm run dev -- --port 1111 --strictPort`. El mismo proceso levanta Vite en watch y la API con SQLite. Los datos son compartidos entre navegadores; el tema sigue siendo local a cada navegador.
+Abrir http://127.0.0.1:5173. Para Console Monitor: `npm run dev -- --port 1111 --strictPort`. El mismo proceso levanta Vite en watch y la API con SQLite. Los datos de cada cuenta se comparten entre sus sesiones de navegador; el tema sigue siendo local a cada navegador.
 
 ```sh
 npm run build
 ```
 
-El build queda en `dist/`. `npm start` sirve la app y la API en http://127.0.0.1:1111; `PORT` cambia el puerto. No necesita servicios externos ni cuentas. El servidor está limitado a 127.0.0.1 y pensado para uso local.
+El build queda en `dist/`. `npm start` sirve la app y la API en http://127.0.0.1:1111; `PORT` cambia el puerto. No necesita servicios externos. Requiere iniciar sesión. El servidor está limitado a 127.0.0.1 y pensado para uso local.
+
+## Acceso
+
+La cuenta inicial es **alexis**, con contraseña **alexis123**. Al abrir una base anterior, la migración asigna todo su documento a alexis sin cambiar jornadas, tareas, proyectos, campos históricos, revisión ni respaldo inicial. La migración es transaccional y se ejecuta una sola vez; no reemplaza los datos existentes.
+
+La contraseña se guarda con scrypt y sal aleatoria. La sesión dura siete días y se guarda en una cookie HttpOnly y SameSite=Strict; **Cerrar sesión** la revoca en el servidor. La API exige sesión tanto para leer como para guardar. Un navegador nuevo necesita iniciar sesión. No hay registro público de usuarios.
 
 ## Documento y planificación
 

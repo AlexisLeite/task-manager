@@ -39,6 +39,10 @@ export class LocalStorageAdapter {
       : null;
   }
 }
+function checkSession(response) {
+  if (response.status === 401 && typeof window !== "undefined")
+    window.dispatchEvent(new Event("worktrack:unauthorized"));
+}
 export class BackendAdapter {
   constructor(url = "/api/workspace") {
     this.url = url;
@@ -46,6 +50,7 @@ export class BackendAdapter {
   }
   async load() {
     const response = await fetch(this.url, { cache: "no-store" });
+    checkSession(response);
     if (!response.ok) throw Error("No se pudo conectar con el servidor.");
     const data = await response.json();
     this.revision = response.headers.get("ETag");
@@ -62,6 +67,7 @@ export class BackendAdapter {
       },
       body: JSON.stringify(data),
     });
+    checkSession(response);
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw Error(body.error || "No se pudo guardar en el servidor.");
@@ -75,6 +81,7 @@ export class BackendAdapter {
       signal: AbortSignal.timeout(10000),
     });
     if (response.status === 304) return null;
+    checkSession(response);
     if (!response.ok) throw Error("No se pudo consultar el servidor.");
     return {
       data: await response.json(),

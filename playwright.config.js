@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
-  testIgnore: "backend.spec.js",
+  testIgnore: ["backend.spec.js", "auth-backend.spec.js"],
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {

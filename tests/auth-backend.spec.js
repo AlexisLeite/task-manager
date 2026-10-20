@@ -1,0 +1,56 @@
+import { test, expect } from "@playwright/test";
+
+test("exige credenciales, conserva la sesión y la revoca al salir", async ({ page, request, browser }) => {
+  expect((await request.get("/api/workspace")).status()).toBe(401);
+  expect((await request.put("/api/workspace", { data: {} })).status()).toBe(401);
+  await page.goto("/#/jornada");
+  await expect(page.getByRole("heading", { name: "Work Track" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Jornada", exact: true })).toHaveCount(0);
+  await page.getByLabel("Usuario", { exact: true }).fill("alexis");
+  await page.getByLabel("Contraseña", { exact: true }).fill("incorrecta");
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Usuario o contraseña incorrectos.");
+  await expect(page.getByLabel("Usuario", { exact: true })).toHaveValue("alexis");
+  await page.getByLabel("Contraseña", { exact: true }).fill("alexis123");
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await expect(page.locator(".session-user")).toHaveText("alexis");
+  const authenticated = page.request;
+  const before = await (await authenticated.get("/api/workspace")).json();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Cerrar sesión" })).toBeVisible();
+  const cookies = await page.context().cookies();
+  const session = cookies.find(cookie => cookie.name === "worktrack_session");
+  expect(session.httpOnly).toBe(true);
+  expect(session.sameSite).toBe("Strict");
+  const anonymous = await browser.newContext();
+  expect((await anonymous.request.get("http://127.0.0.1:4174/api/workspace")).status()).toBe(401);
+  await anonymous.close();
+  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  await expect(page.getByRole("button", { name: "Iniciar sesión" })).toBeVisible();
+  expect((await request.get("/api/workspace")).status()).toBe(401);
+  expect((await authenticated.get("/api/session", { headers: { Cookie: `worktrack_session=${session.value}` } })).status()).toBe(401);
+  await authenticated.post("/api/login", { data: { username: "alexis", password: "alexis123" } });
+  expect(await (await authenticated.get("/api/workspace")).json()).toEqual(before);
+  await page.setViewportSize({ width: 375, height: 760 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  await expect(page.getByLabel("Usuario", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/login-mobile.png" });
+});
+
+test("una sesión revocada vuelve a pedir acceso y conserva la pantalla al reingresar", async ({ page, context }) => {
+  await page.clock.install();
+  await context.request.post("/api/login", { data: { username: "alexis", password: "alexis123" } });
+  await page.goto("/#/proyectos");
+  await expect(page.getByRole("button", { name: "Cerrar sesión" })).toBeVisible();
+  await context.request.post("/api/logout");
+  await page.clock.runFor(1100);
+  await expect(page.getByLabel("Usuario", { exact: true })).toBeVisible();
+  await expect(page.locator("#app")).toBeHidden();
+  await page.getByLabel("Usuario", { exact: true }).fill("alexis");
+  await page.getByLabel("Contraseña", { exact: true }).fill("alexis123");
+  await page.getByRole("button", { name: "Iniciar sesión" }).click();
+  await expect(page.getByRole("textbox", { name: "Nombre del proyecto" })).toBeVisible();
+});

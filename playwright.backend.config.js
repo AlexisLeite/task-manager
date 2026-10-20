@@ -6,7 +6,7 @@ import { join } from "node:path";
 const dir = mkdtempSync(join(tmpdir(), "worktrack-e2e-"));
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "backend.spec.js",
+  testMatch: ["backend.spec.js", "auth-backend.spec.js"],
   workers: 1,
   use: { baseURL: "http://127.0.0.1:4174", trace: "retain-on-failure" },
   webServer: {

@@ -41,6 +41,15 @@ test("API y adaptador guardan, rechazan datos inválidos y bloquean escrituras d
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const url = `http://127.0.0.1:${server.address().port}/api/workspace`;
+  const originalFetch = globalThis.fetch;
+  const login = await originalFetch(url.replace("/workspace", "/login"), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "alexis", password: "alexis123" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  globalThis.fetch = (input, options = {}) => originalFetch(input, {
+    ...options, headers: { ...options.headers, Cookie: cookie },
+  });
   try {
     const one = new Repository(new BackendAdapter(url)),
       two = new BackendAdapter(url);
@@ -84,6 +93,7 @@ test("API y adaptador guardan, rechazan datos inválidos y bloquean escrituras d
     });
     assert.equal(foreign.status, 403);
   } finally {
+    globalThis.fetch = originalFetch;
     await new Promise((resolve) => server.close(resolve));
     store.close();
   }
