@@ -1,4 +1,46 @@
 import { test, expect } from "@playwright/test";
+import { document as empty, task, block } from '../src/model.js';
+
+test('reanudar persiste nuevas instancias y sus tramos anteriores en SQLite', async ({ page }) => {
+  await page.clock.install({time:new Date('2026-10-16T10:00:00')});
+  await page.clock.pauseAt(new Date('2026-10-16T10:00:00'));
+  const plan=empty();
+  for (const name of ['A','B']) {
+    const item={...task(plan.tasks),name,estimate:'02:00',projectId:'p'};
+    plan.tasks.push(item);
+  }
+  // Both tasks share a block, so closing one must not change the other's identity.
+  plan.blocks.push({...block(),taskIds:plan.tasks.map(t=>t.id),start:'09:00',end:'11:00'});
+  expect((await page.request.post('/api/login',{data:{username:'alexis',password:'alexis123'}})).ok()).toBeTruthy();
+  const loaded=await page.request.get('/api/workspace');
+  expect((await page.request.put('/api/workspace',{headers:{'If-Match':loaded.headers().etag},
+    data:{version:2,tasks:[],projects:[{id:'p',name:'POC'}],days:{'2026-10-16':{plan,actual:null}}}})).ok()).toBeTruthy();
+  await page.goto('/#/jornada');
+  await page.getByRole('button',{name:'Pausar el tiempo',exact:true}).click();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  await page.clock.fastForward(1800000);
+  await page.reload();
+  await page.getByRole('button',{name:'Reanudar el tiempo',exact:true}).click();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  const data=await (await page.request.get('/api/workspace')).json();
+  const day=data.days['2026-10-16'];
+  expect(day.plan.tasks).toHaveLength(4);
+  expect(day.actual.blocks).toHaveLength(2);
+  expect(day.actual.blocks.map(row=>[row.start,row.end])).toEqual([['09:00','10:00'],['09:00','10:00']]);
+  expect(new Set(day.plan.blocks.map(row=>row.id)).size).toBe(4);
+  for (const original of plan.tasks) {
+    const instances=day.plan.tasks.filter(task=>task.name===original.name);
+    expect(instances).toHaveLength(2);
+    expect(instances.every(task=>task.taskId===original.taskId && task.projectId==='p')).toBe(true);
+    const previous=day.plan.blocks.find(row=>row.taskIds.includes(original.id));
+    const current=day.plan.blocks.find(row=>row.taskIds.includes(instances.find(t=>t.id!==original.id).id));
+    expect(previous).toMatchObject({start:'09:00',end:'10:00',focusStates:{[original.id]:'finished'}});
+    expect(current).toMatchObject({start:'10:30',end:'11:30'});
+  }
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Pausar el tiempo',exact:true})).toBeVisible();
+  expect(await (await page.request.get('/api/workspace')).json()).toEqual(data);
+});
 
 test("exige credenciales, conserva la sesión y la revoca al salir", async ({ page, request, browser }) => {
   expect((await request.get("/api/workspace")).status()).toBe(401);

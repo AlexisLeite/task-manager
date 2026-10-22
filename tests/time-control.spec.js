@@ -13,7 +13,7 @@ async function setup(page,now='2026-10-16T10:00:00') {
 }
 async function stored(page) { await expect(page.locator('#saved')).toHaveText('Guardado');return page.evaluate(()=>JSON.parse(localStorage.getItem('jornada.v1'))); }
 function intervals(data,key='2026-10-16') {const p=data.days[key].plan;return Object.fromEntries(p.blocks.map(b=>[p.tasks.find(t=>b.taskIds.includes(t.id)).name,[b.start,b.end]]));}
-test('pausar congela el reloj, sobrevive recarga y desplaza también las futuras',async({page})=>{
+test('reanudar crea instancias nuevas y conserva el trabajo anterior a la pausa',async({page})=>{
   await setup(page);
   await page.getByRole('button',{name:'Pausar el tiempo',exact:true}).click();
   await page.clock.fastForward(30*60000);
@@ -23,9 +23,59 @@ test('pausar congela el reloj, sobrevive recarga y desplaza también las futuras
   await expect(page.locator('#app-clock')).toHaveText('10:00:00');
   await page.getByRole('button',{name:'Reanudar el tiempo',exact:true}).click();
   const data=await stored(page);
-  expect(intervals(data)).toEqual({Anterior:['08:00','09:00'],Activa:['09:30','11:30'],Paralela:['10:00','11:00'],Futura:['12:30','13:30']});
-  expect(data.days['2026-10-16'].actual).toBeNull();
+  expect(intervals(data)).toEqual({Anterior:['08:00','09:00'],Activa:['10:30','11:30'],Paralela:['10:30','11:00'],Futura:['12:30','13:30']});
+  const {plan,actual}=data.days['2026-10-16'];
+  expect(plan.tasks).toHaveLength(6);
+  expect(actual.blocks.map(row=>[row.start,row.end]).sort()).toEqual([['09:00','10:00'],['09:30','10:00']]);
+  for (const name of ['Activa','Paralela']) {
+    const instances=plan.tasks.filter(task=>task.name===name);
+    expect(instances).toHaveLength(2);
+    expect(instances[0].id).not.toBe(instances[1].id);
+    expect(instances[0].taskId).toBe(instances[1].taskId);
+    const old=plan.blocks.find(row=>row.taskIds.includes(instances[0].id));
+    expect(old.end).toBe('10:00');
+    expect(old.focusStates[instances[0].id]).toBe('finished');
+  }
   await expect(page.locator('#app-clock')).toHaveText('10:30:00');
+  await expect(page.locator('#total')).toHaveText('Trabajado: 2:00 hs');
+  await page.clock.fastForward(15*60000);
+  await page.getByRole('button',{name:'Pausar el tiempo',exact:true}).click();
+  await page.clock.fastForward(30*60000);
+  await page.getByRole('button',{name:'Reanudar el tiempo',exact:true}).click();
+  const repeated=await stored(page);
+  expect(repeated.days['2026-10-16'].plan.tasks).toHaveLength(8);
+  expect(repeated.days['2026-10-16'].actual.blocks.slice(0,2)).toEqual(actual.blocks);
+  expect(repeated.days['2026-10-16'].actual.blocks.slice(2).map(row=>[row.start,row.end])).toEqual([['10:30','10:45'],['10:30','10:45']]);
+  expect(intervals(repeated)).toMatchObject({Activa:['11:15','12:00'],Paralela:['11:15','11:30'],Futura:['13:00','14:00']});
+  await expect(page.locator('#total')).toHaveText('Trabajado: 2:15 hs');
+});
+
+test('pausa de tarea abierta atraviesa medianoche sin mover ni reemplazar el primer tramo',async({page})=>{
+  await page.clock.install({time:new Date('2026-10-16T23:30:00')});
+  await page.clock.pauseAt(new Date('2026-10-16T23:30:00'));
+  const plan=empty(), t={...task([]),name:'Trabajo nocturno',projectId:'p'};
+  plan.tasks.push(t);plan.blocks.push({...block(),taskIds:[t.id],start:'23:00',end:'',openStarted:true});
+  await page.addInitScript(data=>{if(!localStorage.getItem('jornada.v1'))localStorage.setItem('jornada.v1',JSON.stringify(data));},
+    {version:2,tasks:[],projects:[{id:'p',name:'POC'}],days:{'2026-10-16':{plan,actual:null}}});
+  await page.goto('/#/foco');
+  await page.getByRole('button',{name:'Pausar el tiempo',exact:true}).click();
+  await page.clock.fastForward(3600000);
+  await page.reload();
+  await page.getByRole('button',{name:'Reanudar el tiempo',exact:true}).click();
+  let data=await stored(page);
+  expect(data.days['2026-10-16'].actual.blocks[0]).toMatchObject({start:'23:00',end:'23:30'});
+  const previous=structuredClone(data.days['2026-10-16']);
+  const next=data.days['2026-10-17'];
+  expect(next.plan.tasks[0]).toMatchObject({name:t.name,taskId:t.taskId,projectId:'p'});
+  expect(next.plan.tasks[0].id).not.toBe(t.id);
+  expect(next.plan.blocks[0]).toMatchObject({start:'00:30',end:'',openStarted:true});
+  await expect(page).toHaveTitle('Work Track - 00:00:00 - POC');
+  await page.clock.fastForward(1800000);
+  await page.getByRole('listitem').getByLabel('Opciones de Trabajo nocturno',{exact:true}).click();
+  await page.getByRole('button',{name:'Terminar tarea',exact:true}).click();
+  data=await stored(page);
+  expect(data.days['2026-10-16']).toEqual(previous);
+  expect(data.days['2026-10-17'].actual.blocks[0]).toMatchObject({start:'00:30',end:'01:00'});
 });
 test('retroceder abre Foco y previsualiza sin modificar; cancelar restaura',async({page},testInfo)=>{
   await setup(page);

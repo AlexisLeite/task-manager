@@ -164,12 +164,59 @@ function applyTimeShift(from) {
   save();
 }
 function toggleClock() {
-  if (data.timeControl?.pausedAt != null) applyTimeShift(data.timeControl.pausedAt);
+  if (data.timeControl?.pausedAt != null) resumeClock();
   else {
     checkpoint();
     data.timeControl = {pausedAt:Date.now()};
     updateClock(); refreshFocus(); save();
   }
+}
+function resumeClock() {
+  checkpoint();
+  const pausedAt = data.timeControl.pausedAt;
+  const resumedAt = Date.now();
+  const paused = new Date(pausedAt);
+  const pausedDate = dateKey(paused);
+  const pausedMinute = paused.getHours()*60 + paused.getMinutes();
+  const entries = activeFocus().filter(entry => entry.current < entry.end)
+    .map(entry => ({...entry,block:structuredClone(entry.block),task:structuredClone(entry.task)}));
+  const continuations = [];
+  for (const entry of entries) {
+    const source = data.days[entry.date].plan;
+    const original = source.blocks.find(row => row.id === entry.block.id);
+    const elapsedDays = Math.round((new Date(`${pausedDate}T00:00:00`) - new Date(`${entry.date}T00:00:00`))/60000);
+    const finish = pausedMinute + elapsedDays;
+    const elapsed = Math.max(0,finish-minutes(entry.block.start));
+    const remaining = entry.openEnded ? null : endMinute(entry.block)-finish;
+    const previous = {...structuredClone(entry.block),taskIds:[entry.task.id],
+      end:time(finish%1440),endDay:Math.floor(finish/1440),openStarted:false,
+      focusStates:{[entry.task.id]:'finished'},intentionalRepeat:true};
+    if (original.taskIds.length > 1) {
+      original.taskIds = original.taskIds.filter(id => id !== entry.task.id);
+      previous.id = uid();
+      source.blocks.push(previous);
+    } else Object.assign(original,previous);
+    source.tasks.find(task => task.id === entry.task.id).estimate = time(elapsed);
+    if (elapsed > 0) recordFocusWork(entry.date,previous,entry.task,time(finish%1440),finish);
+    continuations.push({task:entry.task,remaining});
+  }
+  data = shiftAgenda(data,pausedAt,resumedAt);
+  const resumed = new Date(resumedAt), key = dateKey(resumed);
+  const start = resumed.getHours()*60 + resumed.getMinutes();
+  for (const {task,remaining} of continuations) {
+    const target = (data.days[key] ||= {plan:newDocument(),actual:null}).plan;
+    const instance = {...task,id:uid(),code:nextCode(target.tasks),estimate:remaining === null ? '' : time(remaining)};
+    target.tasks.push(instance);
+    target.blocks.push({...block(),taskIds:[instance.id],start:time(start),
+      end:remaining === null ? '' : time((start+remaining)%1440),
+      endDay:remaining === null ? 0 : Math.floor((start+remaining)/1440),
+      openStarted:remaining === null,intentionalRepeat:true,description:instance.name});
+  }
+  timePreview = null;
+  refreshContinuations(data);
+  if (view === 'focus') { updateClock(); refreshFocus(); }
+  else render();
+  save();
 }
 async function openTimeTravel() {
   const initial = appNow();

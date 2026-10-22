@@ -50,6 +50,8 @@ El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Reali
 
 Al pulsar Play en Jornada sobre una tarea terminada, se crea una nueva instancia sin duración fijada, con inicio en ese momento y el mismo nombre, proyecto e identidad para Historia. La instancia anterior conserva sus horarios y registros realizados. Cambiar el tiempo mueve únicamente las instancias pendientes o en curso. Al cruzar medianoche, el trabajo se reparte entre los bloques de cada día.
 
+Al reanudar el reloj global después de una pausa, se registra el tramo trabajado hasta la pausa y se crea una nueva instancia para cada tarea que estaba en ejecución. La nueva instancia comienza al reanudar y conserva nombre, proyecto e identidad para Historia. Si tenía duración prevista, continúa con el tiempo restante; si era abierta, sigue sin fin fijado. El intervalo de pausa no cuenta como trabajo y las tareas futuras se desplazan según la duración de la pausa.
+
 ## Reconciliación y mes
 
 **Realizado** es una vista de consulta. Los registros se generan únicamente desde Foco al terminar o reprogramar una tarea. No permite ingresar, editar ni pegar trabajo realizado manualmente, ni copiar la planificación como realizado. Se conservan los registros históricos existentes.
