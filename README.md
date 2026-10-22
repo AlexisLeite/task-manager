@@ -48,6 +48,8 @@ El menú contiene **Foco, Jornada, Historia y Proyectos**. La app abre en Foco. 
 
 El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Realizado el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
 
+Al pulsar Play en Jornada sobre una tarea terminada, se crea una nueva instancia sin duración fijada, con inicio en ese momento y el mismo nombre, proyecto e identidad para Historia. La instancia anterior conserva sus horarios y registros realizados. Cambiar el tiempo mueve únicamente las instancias pendientes o en curso. Al cruzar medianoche, el trabajo se reparte entre los bloques de cada día.
+
 ## Reconciliación y mes
 
 **Realizado** es una vista de consulta. Los registros se generan únicamente desde Foco al terminar o reprogramar una tarea. No permite ingresar, editar ni pegar trabajo realizado manualmente, ni copiar la planificación como realizado. Se conservan los registros históricos existentes.

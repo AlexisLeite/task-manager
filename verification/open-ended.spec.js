@@ -96,7 +96,7 @@ test('play aparece en hover a la izquierda de dots e inicia tareas con y sin dur
  }
 });
 
-test('play de Jornada comparte celda con eliminar y retoma sin duplicar horas',async({page,request})=>{
+test('play de Jornada comparte celda con eliminar y copia la terminada sin mover horas',async({page,request})=>{
  await setup(page,request);
  await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
  const row=page.locator('tr').filter({has:page.locator('input[value="Investigar sin duración"]')});
@@ -114,14 +114,18 @@ test('play de Jornada comparte celda con eliminar y retoma sin duplicar horas',a
  await page.getByRole('button',{name:'Jornada',exact:true}).click();await page.clock.runFor(500);
  await expect(play).toBeVisible();await play.click();
  let data=await read(page,request);
- const task=data.days['2026-10-16'].plan.tasks.find(t=>t.name==='Investigar sin duración');
- expect(data.days['2026-10-16'].plan.blocks.find(b=>b.taskIds.includes(task.id))).toMatchObject({start:'13:30',end:'',openStarted:true});
+ const tasks=data.days['2026-10-16'].plan.tasks.filter(t=>t.name==='Investigar sin duración');
+ expect(tasks).toHaveLength(2);
+ expect(tasks[0].taskId).toBe(tasks[1].taskId);
+ expect(data.days['2026-10-16'].plan.blocks.find(b=>b.taskIds.includes(tasks[0].id))).toMatchObject({start:'10:00',end:'11:30'});
+ expect(data.days['2026-10-16'].plan.blocks.find(b=>b.taskIds.includes(tasks[1].id))).toMatchObject({start:'15:00',end:'',openStarted:true});
  await page.getByRole('button',{name:'Foco',exact:true}).click();await page.clock.runFor(500);
  await page.clock.fastForward(30*60000);
  await (await menu(page)).getByRole('button',{name:'Terminar tarea',exact:true}).click();
  data=await read(page,request);
- expect(data.days['2026-10-16'].actual.blocks).toHaveLength(1);
- expect(data.days['2026-10-16'].actual.blocks[0]).toMatchObject({start:'13:30',end:'15:30'});
+ expect(data.days['2026-10-16'].actual.blocks).toHaveLength(2);
+ expect(data.days['2026-10-16'].actual.blocks[0]).toMatchObject({start:'10:00',end:'11:30'});
+ expect(data.days['2026-10-16'].actual.blocks[1]).toMatchObject({start:'15:00',end:'15:30'});
 });
 
 test('play de Jornada adelanta una pendiente conservando duración',async({page,request})=>{

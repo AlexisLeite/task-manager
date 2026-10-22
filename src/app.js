@@ -289,13 +289,13 @@ function select(grid, i, range = false) {
       tr.setAttribute("aria-selected", selection.indices.has(n));
     });
 }
-function commit(fn, focus) {
+function commit(fn, focus, keepOrder = true) {
   checkpoint();
   fn();
   if (doc()) syncPlan(doc());
   if (mode === "actual" && doc()) registerTasks(data, doc());
   clearSelection();
-  render(true);
+  render(keepOrder);
   save();
   if (focus) focusCell(...focus);
 }
@@ -746,13 +746,21 @@ function startGridTask(t) {
   if (!row) return;
   const original = data.days[key].plan.tasks.find(item => item.id === t.id);
   const finished = row.focusStates?.[t.id] === 'finished';
-  const sourceFocus = `${row.id}/${t.id}`;
-  const consumed = finished ? Object.values(data.days).flatMap(day => day.actual?.blocks || [])
-    .filter(item => item.sourceFocus === sourceFocus)
-    .reduce((total,item) => total + Math.max(0,minutes(item.end)-minutes(item.start)),0) : 0;
-  const start = new Date(appNow().getTime()-consumed*60000);
+  const start = appNow();
   const targetKey = dateKey(start), startMinute = start.getHours()*60+start.getMinutes();
-  const length = finished ? 0 : minutes(original.estimate);
+  if (finished) {
+    commit(() => {
+      data = canonicalWorkspace(data);
+      const target = (data.days[targetKey] ||= {plan:newDocument(),actual:null}).plan;
+      const instance = {...structuredClone(original),id:uid(),code:nextCode(target.tasks),estimate:''};
+      target.tasks.push(instance);
+      target.blocks.push({...block(),taskIds:[instance.id],start:time(startMinute),
+        openStarted:true,intentionalRepeat:true,description:instance.name});
+      setSelectedDate(targetKey);
+    }, null, false);
+    return;
+  }
+  const length = minutes(original.estimate);
   commit(() => {
     // Remove projections before moving the canonical execution to another day.
     data = canonicalWorkspace(data);
@@ -765,7 +773,6 @@ function startGridTask(t) {
     if (current.taskIds.length > 1) {
       current.taskIds = current.taskIds.filter(id => id !== t.id);
       moved.id = uid();
-      if (finished) moved.resumeSourceFocus = sourceFocus;
     } else source.blocks = source.blocks.filter(item => item !== current);
     const target = (data.days[targetKey] ||= {plan:newDocument(),actual:null}).plan;
     let targetTask = target.tasks.find(item => item.id === t.id);
@@ -774,12 +781,11 @@ function startGridTask(t) {
       if (target.tasks.some(item => item.code === targetTask.code)) targetTask.code = nextCode(target.tasks);
       target.tasks.push(targetTask);
     }
-    if (finished) targetTask.estimate = '';
     target.blocks.push(moved);
     if (source !== target && !source.blocks.some(item => item.taskIds.includes(t.id)))
       source.tasks = source.tasks.filter(item => item.id !== t.id);
     setSelectedDate(targetKey);
-  });
+  }, null, false);
 }
 function taskValue(t, field) {
   if (!t) return '';
