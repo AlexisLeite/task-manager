@@ -440,6 +440,27 @@ function confirmDeleteRows() {
   };
   document.body.append(dialog);
   dialog.showModal();
+  focusConfirmation(dialog);
+}
+function focusConfirmation(dialog) {
+  const button = dialog.querySelector('button[type="submit"]');
+  const controller = new AbortController();
+  let interacted = false;
+  const markInteraction = () => { interacted = true; };
+  for (const event of ['pointerdown','keydown'])
+    dialog.addEventListener(event,markInteraction,{signal:controller.signal});
+  const focus = () => {
+    if (dialog.open && button?.isConnected && !interacted)
+      button.focus({preventScroll:true});
+  };
+  focus();
+  const frame = requestAnimationFrame(focus);
+  const retry = setTimeout(focus,200);
+  dialog.addEventListener('close',() => {
+    cancelAnimationFrame(frame);
+    clearTimeout(retry);
+    controller.abort();
+  },{once:true});
 }
 function deleteRows(portionOnly = true) {
   if (!selection.indices.size) return;

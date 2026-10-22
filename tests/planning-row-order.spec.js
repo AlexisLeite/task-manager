@@ -43,6 +43,7 @@ for (const reducedMotion of ['reduce','no-preference']) {
       await setup(page,reducedMotion);
       await page.getByRole('button',{name:`Eliminar ${removed}`,exact:true}).click();
       await expect(page.getByRole('dialog',{name:'Eliminar tarea'}).getByRole('button',{name:'Eliminar',exact:true})).toBeFocused();
+      await expect(page.getByRole('dialog',{name:'Eliminar tarea'}).getByRole('button',{name:'Eliminar',exact:true})).toHaveCSS('outline-style','solid');
       await page.keyboard.press('Enter');
       const expected=['t6','t1','t3','t2','t4'].filter(code=>code!==removed);
       await expect.poll(()=>codes(page)).toEqual(expected);
@@ -53,3 +54,26 @@ for (const reducedMotion of ['reduce','no-preference']) {
     });
   }
 }
+
+test('confirmación recupera el foco si se pierde al abrir y respeta luego el teclado',async({page})=>{
+  await setup(page,'no-preference');
+  await page.evaluate(()=>{
+    const show=HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal=function(){
+      show.call(this);
+      queueMicrotask(()=>document.activeElement?.blur());
+    };
+  });
+  await page.getByRole('button',{name:'Eliminar t3',exact:true}).click();
+  await page.clock.runFor(32);
+  const dialog=page.getByRole('dialog',{name:'Eliminar tarea'});
+  await expect(dialog.getByRole('button',{name:'Eliminar',exact:true})).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await page.clock.runFor(500);
+  await expect(dialog.getByRole('button',{name:'Cancelar',exact:true})).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await page.clock.runFor(500);
+  await expect(page.getByRole('button',{name:'Eliminar t3',exact:true})).toBeFocused();
+  await expect.poll(()=>codes(page)).toEqual(['t6','t1','t3','t2','t4']);
+});

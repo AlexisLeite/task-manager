@@ -868,6 +868,10 @@ details[open]::details-content {
 .dialog-actions [type="submit"] {
   background: var(--selected);
 }
+.dialog-actions [type="submit"]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .dialog-error {
   color: var(--danger);
 }
