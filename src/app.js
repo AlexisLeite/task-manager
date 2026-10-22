@@ -337,12 +337,13 @@ function select(grid, i, range = false) {
     });
 }
 function commit(fn, focus, keepOrder = true) {
+  const order = keepOrder ? {date,...planningOrder(doc())} : null;
   checkpoint();
   fn();
   if (doc()) syncPlan(doc());
   if (mode === "actual" && doc()) registerTasks(data, doc());
   clearSelection();
-  render(keepOrder);
+  render(keepOrder, order?.date === date ? order : null);
   save();
   if (focus) focusCell(...focus);
 }
@@ -419,9 +420,10 @@ function confirmDeleteRows() {
   const trigger = document.activeElement;
   const dialog = document.createElement('dialog');
   dialog.className = 'task-dialog';
+  dialog.dataset.gridAction = 'delete';
   dialog.setAttribute('aria-label','Eliminar tarea');
   const names = picked.indices.map(i=>rows(picked.grid)[i]?.name || rows(picked.grid)[i]?.code || '').join(', ');
-  dialog.innerHTML = `<form><h2>Eliminar ${picked.indices.length === 1 ? 'tarea' : 'tareas'}</h2><p>${esc(names)}</p><p>Se quitará solamente la parte de esta jornada. Las horas realizadas se conservan.</p><div class="dialog-actions"><button type="button" data-dismiss autofocus>Cancelar</button><button type="submit">Eliminar</button></div></form>`;
+  dialog.innerHTML = `<form><h2>Eliminar ${picked.indices.length === 1 ? 'tarea' : 'tareas'}</h2><p>${esc(names)}</p><p>Se quitará solamente la parte de esta jornada. Las horas realizadas se conservan.</p><div class="dialog-actions"><button type="button" data-dismiss>Cancelar</button><button type="submit" autofocus>Eliminar</button></div></form>`;
   dialog.querySelector('[data-dismiss]').onclick = ()=>dialog.close();
   dialog.onclick = event => {
     if (event.target !== dialog) return;
@@ -1718,7 +1720,11 @@ function sortDayByStart(current) {
   const tasks = [...current.tasks].sort((a, b) => (starts.get(a.id) ?? Infinity) - (starts.get(b.id) ?? Infinity));
   return { blocks, tasks, changed: blocks.some((row, i) => row !== current.blocks[i]) || tasks.some((row, i) => row !== current.tasks[i]) };
 }
-function render(keepOrder = false) {
+function planningOrder(plan) {
+  return {tasks:plan?.tasks.map(task=>task.id) || [],blocks:plan?.blocks.map(row=>row.id) || []};
+}
+function render(keepOrder = false, previousOrder = null) {
+  const visibleOrder = keepOrder ? planningOrder(doc()) : null;
   isRendering = true;
   closeSuggestions();
   clearSelection();
@@ -1731,6 +1737,23 @@ function render(keepOrder = false) {
       const sorted = sortDayByStart(doc());
       doc().blocks = sorted.blocks;
       doc().tasks = sorted.tasks;
+    } else {
+      // Continuations are rebuilt from their source day. Restore their visible
+      // positions, including when a mutation first removed the projections.
+      for (const field of ['tasks','blocks']) {
+        const ids = [...visibleOrder[field]];
+        const previous = previousOrder?.[field] || [];
+        for (const [index,id] of previous.entries()) {
+          if (ids.includes(id)) continue;
+          const next = previous.slice(index+1).find(other=>ids.includes(other));
+          const before = previous.slice(0,index).findLast(other=>ids.includes(other));
+          const position = next !== undefined ? ids.indexOf(next)
+            : before !== undefined ? ids.indexOf(before)+1 : 0;
+          ids.splice(position,0,id);
+        }
+        const rank = new Map(ids.map((id,index)=>[id,index]));
+        doc()[field].sort((a,b)=>(rank.get(a.id) ?? Infinity)-(rank.get(b.id) ?? Infinity));
+      }
     }
   }
   document.querySelector("#app").innerHTML =
@@ -2108,12 +2131,13 @@ function bindGrids() {
     };
   });
   const planTable = document.querySelector('[data-table="tasks"]');
-  if (planTable)
-    planTable.addEventListener("focusout", (event) => {
+  if (planTable) {
+    const leavePlan = (event) => {
       if (
         isRendering ||
         !planTable.isConnected ||
-        planTable.contains(event.relatedTarget) || event.relatedTarget?.closest('.grid-options')
+        planTable.contains(event.relatedTarget) ||
+        event.relatedTarget?.closest('#add-tasks, .grid-options, [data-grid-action="delete"]')
       )
         return;
       const current = doc();
@@ -2144,7 +2168,10 @@ function bindGrids() {
           });
       if (targetTask) focusCell('tasks', current.tasks.findIndex(task => task.id === targetTask), Number(targetCol));
       save();
-    });
+    };
+    planTable.addEventListener('focusout',leavePlan);
+    document.getElementById('add-tasks')?.addEventListener('focusout',leavePlan);
+  }
 }
 function syncCompletedTime(key, row, task, previousId = row?.id) {
   if (row?.focusStates?.[task.id] !== 'finished' || !clock(row.start) || !clock(row.end) || endMinute(row) <= minutes(row.start)) return;
