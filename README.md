@@ -47,7 +47,7 @@ Un mismo sondeo cada segundo recalcula las actividades según la hora y consulta
 
 El menú contiene **Foco, Jornada, Historia y Proyectos**. La app abre en Foco. Las actividades en curso muestran controles para reordenar y cambiar prioridades, una cuenta regresiva y una barra fina de tiempo restante. Debajo aparecen en gris oscuro, sin barra, las tareas que comienzan durante las próximas tres horas, incluso si pertenecen al día siguiente. Al pasar el cursor toman el color de las activas. Foco es independiente de la fecha seleccionada en Jornada. Cada actividad muestra el tiempo restante hasta el fin del bloque en `hh:mm:ss`. Se actualiza cada segundo, incluye tareas paralelas y cambia automáticamente al comenzar o terminar un bloque. AutoAnimate desplaza suavemente las filas al retirarse una tarea; respeta la preferencia de movimiento reducido.
 
-El menú ⋮ junto al contador permite **Terminar tarea**, que registra en Realizado el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
+El menú ⋮ junto al contador permite **Terminar tarea**, que registra el trabajo realizado en el intervalo desde el inicio hasta la hora actual (precisión de minutos), o **Cancelar tarea**, que la retira de Foco sin añadir horas. En pendientes ofrece **Iniciar tarea** y **Cancelar tarea**: iniciar adelanta el comienzo a ahora y conserva su duración. Las acciones se guardan; las tareas paralelas se gestionan individualmente.
 
 Al pulsar Play en Jornada sobre una tarea terminada, se crea una nueva instancia sin duración fijada, con inicio en ese momento y el mismo nombre, proyecto e identidad para Historia. La instancia anterior conserva sus horarios y registros realizados. Cambiar el tiempo mueve únicamente las instancias pendientes o en curso. Al cruzar medianoche, el trabajo se reparte entre los bloques de cada día.
 
@@ -55,7 +55,7 @@ Al reanudar el reloj global después de una pausa, se registra el tramo trabajad
 
 ## Reconciliación y mes
 
-**Realizado** es una vista de consulta. Los registros se generan únicamente desde Foco al terminar o reprogramar una tarea. No permite ingresar, editar ni pegar trabajo realizado manualmente, ni copiar la planificación como realizado. Se conservan los registros históricos existentes.
+Jornada muestra únicamente **Planificación**. El trabajo realizado se consulta en **Historia** y se genera desde Foco o al marcar explícitamente una tarea como completada. Se conservan los registros históricos existentes; no se copia la planificación como trabajo realizado.
 
 Al escribir una descripción, aparecen tareas conocidas que ya tienen tiempo registrado en realizado. Las sugerencias se eligen con flechas y Enter o con clic. Reutilizan una identidad estable entre jornadas; una coincidencia de nombre también la reutiliza.
 
@@ -83,7 +83,7 @@ El círculo de prioridad abre las opciones Baja, Media y Alta, tanto en Tareas p
 Las filas se pegan antes de la fila enfocada, o después si el cursor está al final de su último campo. **Home**, pegar: antes. **End**, pegar: después. No es necesario añadir una fila vacía. El pegado tabulado es compatible con spreadsheets:
 
 - Definiciones: `identificador\tduración\tprioridad\tdescripción`.
-- Plan: `referencias\tdescripción\tinicio\tfin`. En planificación el fin se recalcula a partir de las duraciones. Realizado no admite pegado.
+- Plan: `referencias\tdescripción\tinicio\tfin`. En planificación el fin se recalcula a partir de las duraciones.
 
 El clipboard interno conserva identidades y referencias; si se copia un bloque a otra jornada, se incluyen las definiciones necesarias. El historial de deshacer mantiene hasta 150 cambios en la sesión; no se conserva al recargar. En macOS se admite Cmd en los atajos principales.
 

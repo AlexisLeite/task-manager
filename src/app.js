@@ -25,7 +25,6 @@ import {
   block,
   task,
   nextCode,
-  totals,
   union,
   resolved,
   references,
@@ -117,7 +116,6 @@ window.addEventListener("hashchange", () => {
 });
 let data,
   date = restoreSelectedDate(),
-  mode = "plan",
   view = routeView(),
   history = [],
   future = [],
@@ -128,7 +126,7 @@ let data,
   lastGrid = "tasks",
   overnightNavigation = null;
 const day = () => (data.days[date] ||= { plan: newDocument(), actual: null });
-const doc = () => day()[mode];
+const doc = () => day().plan;
 const rows = (grid) => doc()?.[grid] || [];
 const isDark = () => document.documentElement.dataset.theme === "dark";
 const notice = (message) => {
@@ -341,7 +339,6 @@ function commit(fn, focus, keepOrder = true) {
   checkpoint();
   fn();
   if (doc()) syncPlan(doc());
-  if (mode === "actual" && doc()) registerTasks(data, doc());
   clearSelection();
   render(keepOrder, order?.date === date ? order : null);
   save();
@@ -556,12 +553,12 @@ function errorFor(grid, r) {
   return "";
 }
 function updateView() {
-  if (!doc() || mode === "actual") return;
+  if (!doc()) return;
   for (const b of doc().blocks)
     b.description = resolved(doc(), b)
       .map((t) => t.name)
       .join(" / ");
-  if (mode === "plan") deriveEnds(doc());
+  deriveEnds(doc());
   document.querySelectorAll("[data-table] tbody tr").forEach((tr) => {
     const grid = tr.closest("table").dataset.table,
       r = rows(grid)[+tr.dataset.index],
@@ -860,7 +857,7 @@ function startGridTask(t) {
 function taskValue(t, field) {
   if (!t) return '';
   const row = taskSchedule(t);
-  if (field === 'estimate' && mode === 'plan' && date === today()) {
+  if (field === 'estimate' && date === today()) {
     const running = runningGridTask(t);
     if (running?.openEnded) return time(Math.floor(Math.max(0, running.current - running.start) / 60));
   }
@@ -876,7 +873,7 @@ function taskStatusIcon(t) {
   return `<span class="plan-status-icon" data-status="running" role="img" aria-label="${esc(t.code)}: En ejecución" title="${esc(t.name || t.code)}: En ejecución"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="5.5" opacity=".2"/><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5"/></svg></span>`;
 }
 function refreshGridStatus() {
-  if (view !== 'day' || mode !== 'plan') return;
+  if (view !== 'day') return;
   refreshWorkedTotal();
   document.querySelectorAll('[data-table="tasks"] tbody tr').forEach(tr => {
     const t = rows('tasks')[+tr.dataset.index];
@@ -1289,7 +1286,6 @@ function actOnFocus(button) {
   if (action === "definition") {
     button.closest("details").open = false;
     setSelectedDate(key);
-    mode = "plan";
     navigate("day");
     const focus = () => {
       focusCell(
@@ -1719,18 +1715,6 @@ document.addEventListener("click", (e) => {
   });
 });
 
-function actualHtml(actual) {
-  if (!actual?.blocks.length)
-    return '<h2>Realizado</h2><p class="empty">Todavía no hay trabajo registrado desde Foco.</p>';
-  return `<h2>Realizado</h2><div class="grid-scroll"><table aria-label="Trabajo realizado"><thead><tr><th>Tarea</th><th>Descripción</th><th>Hora inicio</th><th>Hora fin</th><th>Duración</th></tr></thead><tbody>${actual.blocks
-    .map((row) => {
-      const tasks = resolved(actual, row);
-      return `<tr><td>${esc(tasks.map((task) => task.code).join(", "))}</td><td>${esc(tasks.map((task) => task.name).join(" / "))}</td><td>${esc(row.start)}</td><td>${esc(row.end)}</td><td>${esc(time(duration(row)))}</td></tr>`;
-    })
-    .join(
-      "",
-    )}</tbody></table></div><p>Total realizado: ${esc(format(totals(actual).work))} hs</p>`;
-}
 function sortDayByStart(current) {
   const start = row => clock(row.start) ? minutes(row.start) : Infinity;
   const blocks = [...current.blocks].sort((a, b) => start(a) - start(b));
@@ -1750,10 +1734,9 @@ function render(keepOrder = false, previousOrder = null) {
   closeSuggestions();
   clearSelection();
   refreshContinuations(data);
-  const d = day();
-  if (doc() && mode === "plan") {
+  if (doc()) {
     syncPlan(doc());
-    if (mode === "plan") deriveEnds(doc());
+    deriveEnds(doc());
     if (!keepOrder) {
       const sorted = sortDayByStart(doc());
       doc().blocks = sorted.blocks;
@@ -1778,7 +1761,7 @@ function render(keepOrder = false, previousOrder = null) {
     }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="${mode === "plan" ? "active" : ""}">Planificación</button><button id="actual" class="${mode === "actual" ? "active" : ""}">Realizado</button></div><div ${mode === "actual" ? "hidden" : ""}><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${mode === "actual" ? actualHtml(d.actual) : `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>`}` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="active">Planificación</button></div><div><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
@@ -1790,7 +1773,6 @@ function bind() {
   bindProjects(data, checkpoint, save);
   bindHistoryControls(historyFilters, data, (key) => {
     setSelectedDate(key);
-    mode = "actual";
     navigate("day");
   });
   if (view === "day" && doc() && (doc().tasks.length || doc().blocks.length)) {
@@ -1843,12 +1825,6 @@ function bind() {
   on("next", () => shift(1));
   on("today", () => changeDate(today()));
   on("plan", () => {
-    mode = "plan";
-    clearSelection();
-    render();
-  });
-  on("actual", () => {
-    mode = "actual";
     clearSelection();
     render();
   });
@@ -1859,7 +1835,7 @@ function bind() {
     )
       return;
     commit(() => {
-      day()[mode] = example();
+      day().plan = example();
     });
   });
   on("add-tasks", () => add("tasks"));
@@ -1882,7 +1858,6 @@ function bind() {
     (el) =>
       (el.onclick = () => {
         setSelectedDate(el.dataset.date);
-        mode = day().actual ? "actual" : "plan";
         navigate("day");
       }),
   );
@@ -1923,7 +1898,6 @@ function bind() {
   };
 }
 function bindGrids() {
-  if (mode === "actual") return;
   document
     .querySelectorAll(".priority-dots")
     .forEach((el) =>
@@ -2082,7 +2056,7 @@ function bindGrids() {
       const r = rows(grid)[i];
       if (field === "refs") setReferences(r, el.value);
       else r[field] = el.value;
-      if (grid === 'tasks' && field === 'projectId' && mode === 'plan') {
+      if (grid === 'tasks' && field === 'projectId') {
         const {row} = sourceSchedule(data,date,taskSchedule(r));
         syncRecordedProject(data,row,r);
       }
@@ -2103,7 +2077,6 @@ function bindGrids() {
         finishTime();
         return;
       }
-      if (mode === "actual") registerTasks(data, doc());
       updateView();
       save();
     };
@@ -2259,7 +2232,6 @@ function applyTimeEdit(grid, index, field, value) {
       t.estimate = value ? time(minutes(value) - minutes(r.start)) : "";
   if (field === "start" && !value) r.end = "";
   deriveEnds(doc());
-  if (mode === "actual") registerTasks(data, doc());
   updateView();
   save();
   return true;
@@ -2452,7 +2424,7 @@ function importDefinitions(incoming) {
   return mapping;
 }
 document.addEventListener("keydown", (e) => {
-  if (view !== "day" || mode === "actual" || document.querySelector("dialog[open]")) return;
+  if (view !== "day" || document.querySelector("dialog[open]")) return;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -2481,7 +2453,7 @@ document.addEventListener("keydown", (e) => {
 });
 for (const type of ["copy", "cut"])
   document.addEventListener(type, (e) => {
-    if (view !== "day" || mode === "actual" || !selection.indices.size) return;
+    if (view !== "day" || !selection.indices.size) return;
     e.preventDefault();
     const grid = selection.grid,
       picked = rows(grid).filter((_, i) => selection.indices.has(i));
@@ -2493,7 +2465,7 @@ for (const type of ["copy", "cut"])
         tasks: doc().tasks,
         cut: type === "cut",
         sourceDate: date,
-        sourceMode: mode,
+        sourceMode: "plan",
         blocks: doc()
           .blocks.map((b, index) => ({ block: b, index }))
           .filter(({ block: b }) =>
@@ -2521,7 +2493,7 @@ for (const type of ["copy", "cut"])
     if (type === "cut") deleteRows(false);
   });
 document.addEventListener("paste", (e) => {
-  if (view !== "day" || mode === "actual" || !doc()) return;
+  if (view !== "day" || !doc()) return;
   const raw = e.clipboardData.getData("application/x-jornada"),
     text = e.clipboardData.getData("text/plain");
   if (!raw && !text.includes("\t") && !text.includes("\n")) return;
@@ -2565,7 +2537,7 @@ document.addEventListener("paste", (e) => {
         const keepId =
           parsed.cut &&
           parsed.sourceDate === date &&
-          parsed.sourceMode === mode &&
+          parsed.sourceMode === "plan" &&
           !doc().tasks.some((t) => t.id === source.id);
         const t = {
           ...source,
@@ -2652,7 +2624,7 @@ document.addEventListener("paste", (e) => {
       parsed?.grid === "tasks" &&
       parsed.cut &&
       parsed.sourceDate === date &&
-      parsed.sourceMode === mode
+      parsed.sourceMode === "plan"
     ) {
       for (const { block: old, index } of parsed.blocks || []) {
         const ids = old.taskIds.filter((id) =>

@@ -1,15 +1,13 @@
 import { test, expect } from '@playwright/test';
 
-test('Realizado solo se genera desde Foco y no admite edición ni pegado', async ({ page }) => {
+test('Jornada solo muestra Planificación y conserva el trabajo realizado para Historia', async ({ page }) => {
   await page.clock.install({ time: new Date('2026-10-15T15:00:00') });
   await page.goto('/#/jornada');
   await page.getByLabel('Fecha de jornada').fill('2026-10-15');
   await page.getByRole('button', { name: 'Cargar ejemplo', exact: true }).click();
-  await page.getByRole('button', { name: 'Realizado', exact: true }).click();
-  await expect(page.getByText('Todavía no hay trabajo registrado desde Foco.')).toBeVisible();
-  await expect(page.locator('#reconcile')).toHaveCount(0);
-  await page.keyboard.press('Control+Enter');
-  await expect(page.locator('main input, main select, main textarea')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Realizado', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Tareas de la jornada' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Trabajo realizado' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Foco', exact: true }).click();
   await page.locator('[data-focus-id]:not(:has(.focus-expired-actions))').first().locator('.focus-remaining summary').click();
   await page.getByRole('button', { name: 'Terminar tarea', exact: true }).click();
@@ -18,12 +16,15 @@ test('Realizado solo se genera desde Foco y no admite edición ni pegado', async
   const before = await readActual();
   expect(before.blocks).toHaveLength(1);
   await page.getByRole('button', { name: 'Jornada', exact: true }).click();
-  await page.getByRole('button', { name: 'Realizado', exact: true }).click();
-  const report = page.getByRole('table', { name: 'Trabajo realizado' });
-  await expect(report).toBeVisible();
-  await expect(report.locator('input, select, button, textarea, [contenteditable]')).toHaveCount(0);
-  await page.keyboard.press('Control+Enter');
-  await page.keyboard.press('Control+z');
-  await report.dispatchEvent('paste', { clipboardData: await page.evaluateHandle(() => { const data = new DataTransfer(); data.setData('text/plain', 't9\t01:00\tMedia\tManual'); return data; }) });
+  await expect(page.getByRole('button', { name: 'Realizado', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Tareas de la jornada' })).toBeVisible();
+  await page.getByRole('button', { name: '+ Tarea', exact: true }).click();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  expect(await readActual()).toEqual(before);
+  await page.getByRole('button', { name: 'Historia', exact: true }).click();
+  await expect(page.locator('#history-actual')).toHaveText('0:30 hs');
+  await page.locator('[data-date="2026-10-15"]').first().click();
+  await expect(page.getByRole('table', { name: 'Tareas de la jornada' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Realizado', exact: true })).toHaveCount(0);
   expect(await readActual()).toEqual(before);
 });

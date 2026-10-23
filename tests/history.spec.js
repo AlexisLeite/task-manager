@@ -89,7 +89,7 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   }));
   expect(widths.body).toBeLessThanOrEqual(widths.viewport);
   await page.locator('[data-date="2026-10-01"]').click();
-  await expect(page.locator("#actual")).toHaveClass("active");
+  await expect(page.locator("#plan")).toHaveClass("active");
   await expect(page.getByLabel("Fecha de jornada")).toHaveValue("2026-10-01");
 });
 
@@ -115,7 +115,7 @@ test("Posponer marca solo los campos Día y Hora y cierra con fondo o Escape", a
     await expect(page.locator("dialog[open]")).toBeVisible();
   };
   await open();
-  for (const field of ["Día", "Hora"]) {
+  for (const field of ["Día", "Hora (opcional)"]) {
     await page.getByLabel(field, { exact: true }).focus();
     await expect(
       page.getByLabel(field, { exact: true }).locator(".."),
@@ -169,7 +169,7 @@ test("una tarea vencida permanece y permite completar o reprogramar conservando 
     .getByRole("button", { name: "Reprogramar tarea", exact: true })
     .click();
   await page.getByLabel("Día", { exact: true }).fill("2026-10-15");
-  await page.getByLabel("Hora", { exact: true }).fill("14:00");
+  await page.getByLabel("Hora (opcional)", { exact: true }).fill("14:00");
   await page.getByLabel("Tiempo trabajado", { exact: true }).fill("3");
   await page
     .getByRole("dialog")
