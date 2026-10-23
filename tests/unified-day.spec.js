@@ -5,7 +5,7 @@ test('Jornada unificada edita horarios y navega con Ctrl+Shift sin depender del 
   await page.getByLabel('Fecha de jornada').fill('2026-10-15');
   await page.getByRole('button',{name:'Cargar ejemplo',exact:true}).click();
   await expect(page.locator('main table')).toHaveCount(1);
-  await expect(page.locator('thead th')).toHaveText(['','Estado','Tarea','Descripción','Duración','Hora inicio','Hora fin','Proyecto','']);
+  await expect(page.locator('thead th')).toHaveText(['','Estado','Tarea','Descripción','Hora inicio','Hora fin','Duración','Proyecto','']);
   await page.locator('tbody tr').first().hover();
   await expect(page.locator('.linked-task-hover')).toHaveCount(0);
   expect(await page.locator('col.project-col').evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(220);
@@ -16,12 +16,14 @@ test('Jornada unificada edita horarios y navega con Ctrl+Shift sin depender del 
   await expect(field(1,'Descripción')).toBeFocused();
   await field(1,'Descripción').evaluate(input=>input.setSelectionRange(input.value.length,input.value.length));
   await page.keyboard.press('Control+ArrowRight');
-  await expect(field(1,'Duración')).toBeFocused();
-  await field(1,'Duración').fill('3');
-  await page.keyboard.press('Control+Shift+ArrowRight');
   await expect(field(1,'Hora inicio')).toBeFocused();
   await field(1,'Hora inicio').fill('15');
   await page.keyboard.press('Control+Shift+ArrowRight');
+  await expect(field(1,'Hora fin')).toBeFocused();
+  await page.keyboard.press('Control+Shift+ArrowRight');
+  await expect(field(1,'Duración')).toBeFocused();
+  await field(1,'Duración').fill('3');
+  await page.keyboard.press('Control+Shift+ArrowLeft');
   await expect(field(1,'Hora fin')).toBeFocused();
   await expect(field(1,'Hora inicio')).toHaveValue('15:00');
   await expect(field(1,'Duración')).toHaveValue('03:00');

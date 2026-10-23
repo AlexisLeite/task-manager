@@ -766,7 +766,7 @@ function priorityControl(
   return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Alta", "Baja", "Media"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
 }
 const columnOrder = (grid) =>
-  grid === "tasks" ? [2, 0, 3, 1, 5, 6, 4] : [0, 1, 2, 3];
+  grid === "tasks" ? [2, 0, 3, 5, 6, 1, 4] : [0, 1, 2, 3];
 function planStatus(row) {
   return row.taskIds
     .map((id) => {
@@ -916,7 +916,7 @@ function changeTaskStatus(t, state) {
   });
 }
 function gridHtml(grid) {
-  return `<div class="grid-scroll"><table data-table="tasks" class="day-grid" aria-label="Tareas de la jornada"><colgroup><col class="grip-col"><col class="status-col"><col class="code-col"><col><col class="estimate-col"><col class="time-col"><col class="time-col"><col class="project-col"><col class="delete-col"></colgroup><thead><tr>${['', 'Estado', 'Tarea', 'Descripción', 'Duración', 'Hora inicio', 'Hora fin', 'Proyecto', ''].map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows('tasks').map((t,i) => `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="tasks" data-index="${i}" aria-label="Seleccionar tarea ${i+1}">⠿</button></td><td class="plan-status">${taskStatusControl(t)}</td>${[0,3,1,5,6,4].map(c => {
+  return `<div class="grid-scroll"><table data-table="tasks" class="day-grid" aria-label="Tareas de la jornada"><colgroup><col class="grip-col"><col class="status-col"><col class="code-col"><col><col class="time-col"><col class="time-col"><col class="estimate-col"><col class="project-col"><col class="delete-col"></colgroup><thead><tr>${['', 'Estado', 'Tarea', 'Descripción', 'Hora inicio', 'Hora fin', 'Duración', 'Proyecto', ''].map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows('tasks').map((t,i) => `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="tasks" data-index="${i}" aria-label="Seleccionar tarea ${i+1}">⠿</button></td><td class="plan-status">${taskStatusControl(t)}</td>${[0,3,5,6,1,4].map(c => {
     const field = fields.tasks[c];
     const attrs = `data-grid="tasks" data-row="${i}" data-col="${c}" aria-label="Tarea ${i+1}: ${labels.tasks[c]}"`;
     if(field === 'projectId') return `<td><select ${attrs}>${projectOptions(data,t.projectId)}</select></td>`;
