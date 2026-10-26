@@ -29,7 +29,7 @@ for (const reducedMotion of ['reduce','no-preference']) {
     await setup(page,reducedMotion);
     await page.getByRole('button',{name:'+ Tarea',exact:true}).click();
     await expect.poll(()=>codes(page)).toEqual(['t6','t1','t3','t2','t4','t5']);
-    await expect(page.getByLabel('Tarea 6: Identificador',{exact:true})).toBeFocused();
+    await expect(page.getByLabel('Tarea 6: Descripción',{exact:true})).toBeFocused();
     await page.getByLabel('Tarea 6: Descripción',{exact:true}).fill('Nueva tarea');
     await expect.poll(()=>codes(page)).toEqual(['t6','t1','t3','t2','t4','t5']);
     await page.getByRole('button',{name:'+ Tarea',exact:true}).focus();

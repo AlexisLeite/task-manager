@@ -277,10 +277,13 @@ export function bindBacklog(
     syncEmpty();
     return entry;
   };
+  let pendingNewTask = null;
   const addRow = () => {
+    const source = selectSource(document.activeElement);
+    const returnId = source?.closest("[data-backlog-id]")?.dataset.backlogId || entries().at(-1)?.id;
     checkpoint();
     clear();
-    append();
+    pendingNewTask = {id:append().id,returnId,column:Math.max(0,fields.indexOf(source?.dataset.backlogField))};
     focus(entries().length - 1);
     save();
   };
@@ -378,6 +381,9 @@ export function bindBacklog(
     queueMicrotask(() => {
       if (!table.isConnected) return;
       const active = document.activeElement;
+      if (pendingNewTask && active?.closest("[data-backlog-id]")?.dataset.backlogId !== pendingNewTask.id &&
+          !active?.closest(".grid-options") && !document.querySelector("dialog[open]"))
+        pendingNewTask = null;
       if (
         table.contains(active) ||
         active === add ||
@@ -429,6 +435,14 @@ export function bindBacklog(
       return;
     }
     if (key === "Escape") {
+      if (pendingNewTask && pendingNewTask.id === row?.dataset.backlogId) {
+        event.preventDefault();
+        const pending = pendingNewTask;
+        pendingNewTask = null;
+        remove(new Set([pending.id]));
+        const previous = entries().findIndex(t => t.id === pending.returnId);
+        if (previous >= 0) focus(previous, pending.column);
+      }
       clear();
       return;
     }
@@ -464,8 +478,10 @@ export function bindBacklog(
       update(input);
       if (i === entries().length - 1 && !event.shiftKey) {
         checkpoint();
-        append();
+        pendingNewTask = {id:append().id,returnId:entries()[i].id,column:c};
         save();
+        focus(entries().length - 1, 0);
+        return;
       }
       focus(i + (event.shiftKey ? -1 : 1), c);
       return;

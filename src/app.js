@@ -132,7 +132,8 @@ let data,
   status = "Guardado",
   revision = 0,
   lastGrid = "tasks",
-  overnightNavigation = null;
+  overnightNavigation = null,
+  pendingNewTask = null;
 const day = () => (data.days[date] ||= { plan: newDocument(), actual: null });
 const doc = () => day().plan;
 const rows = (grid) => doc()?.[grid] || [];
@@ -392,11 +393,16 @@ function add(grid) {
     grid = "tasks";
   }
   const i = rows(grid).length;
+  const previous = activeCell();
+  const returnId = rows(grid)[previous?.[1] ?? i - 1]?.id;
+  let added;
   commit(() => {
-    if (grid === "tasks") doc().tasks.push(task(doc().tasks));
-    else
-      doc().blocks.push({ ...block(), start: doc().blocks.at(-1)?.end || "" });
-  }, [grid, i, 0]);
+    if (grid === "tasks") {
+      added = task(doc().tasks);
+      doc().tasks.push(added);
+    } else doc().blocks.push({ ...block(), start: doc().blocks.at(-1)?.end || "" });
+  }, [grid, i, grid === "tasks" ? 3 : 0]);
+  if (added) pendingNewTask = {id:added.id,date,returnId,column:previous?.[2] ?? 3};
 }
 function move(grid, from, to) {
   if (from === to) return;
@@ -1834,6 +1840,7 @@ function planningOrder(plan) {
   return {tasks:plan?.tasks.map(task=>task.id) || [],blocks:plan?.blocks.map(row=>row.id) || []};
 }
 function render(keepOrder = false, previousOrder = null) {
+  if (!keepOrder) pendingNewTask = null;
   const visibleOrder = keepOrder ? planningOrder(doc()) : null;
   isRendering = true;
   closeSuggestions();
@@ -2248,6 +2255,14 @@ function bindGrids() {
   });
   const planTable = document.querySelector('[data-table="tasks"]');
   if (planTable) {
+    planTable.addEventListener("focusout", () => queueMicrotask(() => {
+      if (!planTable.isConnected || !pendingNewTask) return;
+      const active = document.activeElement;
+      if (active?.closest(".grid-options") || document.querySelector("dialog[open]")) return;
+      const index = active?.closest("[data-index]")?.dataset.index;
+      if (index === undefined || doc().tasks[Number(index)]?.id !== pendingNewTask.id)
+        pendingNewTask = null;
+    }));
     planTable.addEventListener("mousedown", event => {
       const row = event.target.closest("tbody tr[data-index]");
       if (!row || event.button !== 0 || !(event.ctrlKey || event.metaKey)) return;
@@ -2407,6 +2422,18 @@ function gridKey(e) {
   if (optionsControl && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'Enter' || e.key.length === 1)) {
     e.preventDefault();
     openGridOptions(e.target, e.key === 'Enter' ? '' : e.key);
+    return;
+  }
+  if (e.key === "Escape" && pendingNewTask?.date === date &&
+      pendingNewTask.id === rows(grid)[i]?.id) {
+    e.preventDefault();
+    e.stopPropagation();
+    const pending = pendingNewTask;
+    pendingNewTask = null;
+    select(grid, i);
+    deleteRows();
+    const previous = rows(grid).findIndex(t => t.id === pending.returnId);
+    if (previous >= 0) focusCell(grid, previous, pending.column);
     return;
   }
   if (fields[grid]?.[c] === 'name' && e.key === 'Enter' && !suggestions && !e.ctrlKey && !e.metaKey) {
