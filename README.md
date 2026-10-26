@@ -142,7 +142,7 @@ Las pruebas de backend usan bases SQLite temporales, nunca los datos del usuario
 
 Historia reúne todo el trabajo realizado, con filtros Desde/Hasta inclusivos, gráficas discretas por jornada y tarea, y acceso a cada jornada. Los intervalos paralelos cuentan una sola vez en el total; cada tarea conserva sus propias horas.
 
-El menú de cada tarea ofrece Ver definición, seguido de las acciones según su estado. Posponer permite elegir día y hora conservando la duración. Las tareas vencidas permanecen visibles con Completa y Reprogramar; esta última conserva las horas invertidas y permite elegir un nuevo horario. Los menús y modales tienen entrada y salida animada, respetando la preferencia de movimiento reducido.
+El menú de cada tarea ofrece Ver definición, seguido de las acciones según su estado. Enviar al backlog cierra la tarea en Jornada, registra el tiempo trabajado y conserva una copia pendiente en Backlog, sin duplicarla si ya existe. Terminar la completa y la retira del backlog; Cancelar mantiene su comportamiento sin registrar un tramo nuevo. Posponer sigue disponible desde Jornada para elegir día y hora conservando la duración. Las tareas vencidas permanecen visibles con Completa y Reprogramar; esta última conserva las horas invertidas y permite elegir un nuevo horario. Los menús y modales tienen entrada y salida animada, respetando la preferencia de movimiento reducido.
 
 
 ## Proyectos

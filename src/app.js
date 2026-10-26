@@ -846,13 +846,12 @@ function startBacklogTask(entry) {
   save();
 }
 
-function sendToBacklog(t) {
-  const {row,key} = sourceSchedule(data,date,taskSchedule(t));
+function sendToBacklog(t, schedule = null) {
+  const {row,key} = schedule || sourceSchedule(data,date,taskSchedule(t));
   if (!row) return;
   const original = data.days[key].plan.tasks.find(item => item.id === t.id);
   const snapshot = structuredClone(original);
   const running = activeFocus().find(e => e.date === key && e.block.id === row.id && e.task.id === t.id);
-  const index = doc().tasks.findIndex(item => item.id === t.id);
   const mutate = () => {
     if (running) {
       // Close only this task's segment; shared tasks continue unchanged.
@@ -873,16 +872,29 @@ function sendToBacklog(t) {
       source.blocks = source.blocks.filter(b => b.taskIds.length || b.refsText);
       source.tasks = source.tasks.filter(item => item.id !== t.id);
     }
-    const existing = data.backlog?.find(item => item.id === snapshot.backlogId);
+    const existing = data.backlog?.find(item => item.id === snapshot.backlogId || item.taskId === snapshot.taskId);
     if (!existing) {
       const entry = {...snapshot,id:uid()};
       delete entry.backlogId;
       (data.backlog ||= []).push(entry);
-      // Finished/running rows remain as history and keep the pending link.
-      const sourceTask = data.days[key].plan.tasks.find(item => item.id === t.id);
-      if (sourceTask) sourceTask.backlogId = entry.id;
     }
+    // Finished/running rows keep the pending link, also when it already existed.
+    const entry = existing || data.backlog.at(-1);
+    const sourceTask = data.days[key].plan.tasks.find(item => item.id === t.id);
+    if (sourceTask) sourceTask.backlogId = entry.id;
   };
+  if (view === 'focus') {
+    checkpoint();
+    mutate();
+    syncPlan(data.days[key].plan);
+    refreshContinuations(data);
+    refreshFocus();
+    document.querySelector('#focus-content summary')?.focus();
+    save();
+    notice('Tarea enviada al backlog.');
+    return;
+  }
+  const index = doc().tasks.findIndex(item => item.id === t.id);
   // This edits the current grid; reserve the lateral transition for navigation.
   pageTransition?.skipTransition();
   const positions = new Map([...document.querySelectorAll('[data-table="tasks"] tbody tr')]
@@ -1071,7 +1083,7 @@ function focusMenu(entry, pending = false) {
       pending ? "Iniciar tarea" : "Terminar tarea",
     ],
     ...(!pending && !entry.openEnded ? [["extend", "Extender tarea"]] : []),
-    ["postpone", "Posponer tarea"],
+    ["backlog", "Enviar al backlog"],
     ["cancel", "Cancelar tarea"],
   ];
   return `<details class="focus-menu"><summary aria-label="Opciones de ${esc(entry.task.name || entry.task.code)}">⋮</summary><div>${actions.map(([action, label]) => `<button data-focus-action="${action}" data-action-date="${entry.date}" data-action-block="${esc(entry.block.id)}" data-action-task="${esc(entry.task.id)}">${label}</button>${action === "definition" ? '<hr role="separator">' : ""}`).join("")}</div></details>`;
@@ -1346,6 +1358,12 @@ function actOnFocus(button) {
     const menu = button.closest("details");
     if (menu) menu.open = false;
     extendTask(key, blockId, taskId, action === "continue");
+    return;
+  }
+  if (action === 'backlog') {
+    const menu = button.closest('details');
+    if (menu) menu.open = false;
+    sendToBacklog(t,{row:b,key});
     return;
   }
   if (action === "postpone" || action === "reschedule") {
@@ -1805,7 +1823,7 @@ function render(keepOrder = false, previousOrder = null) {
     }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `<div class="document-tools"><div class="tabs"><button id="plan" class="active">Planificación</button></div><div><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></div></div>${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button><span class="day-history-controls"><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></span></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
@@ -1870,10 +1888,6 @@ function bind() {
   on("prev", () => shift(-1));
   on("next", () => shift(1));
   on("today", () => changeDate(today()));
-  on("plan", () => {
-    clearSelection();
-    render();
-  });
   on("example", () => {
     if (
       (doc().tasks.length || doc().blocks.length) &&

@@ -406,3 +406,117 @@ test("Papelera de Backlog confirma, enfoca Eliminar, permite cancelar y conserva
     page.getByRole("button", { name: "+ Tarea", exact: true }),
   ).toBeFocused();
 });
+
+for (const existing of [false, true])
+  test(`Enviar desde Foco registra trabajo y evita duplicados (existente: ${existing})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const plan = empty(),
+      t = { ...task([]), name: "Reglas", estimate: "02:00", projectId: "p" };
+    const parallel = {
+      ...task([]),
+      name: "Paralela",
+      code: "t2",
+      estimate: "02:00",
+    };
+    const backlogEntry = { ...t, id: "pending" };
+    plan.tasks = [t, parallel];
+    plan.blocks = [
+      {
+        ...block(),
+        taskIds: [t.id, parallel.id],
+        start: "09:00",
+        end: "11:00",
+      },
+    ];
+    await seed(page, {
+      version: 2,
+      tasks: [],
+      projects: [{ id: "p", name: "POC" }],
+      backlog: existing ? [backlogEntry] : [],
+      days: { "2026-10-26": { plan, actual: null } },
+    });
+    await page.goto("/#/foco");
+    await page.getByLabel("Opciones de Reglas", { exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Posponer tarea", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Enviar al backlog", exact: true })
+      .click();
+    await expect(page).toHaveURL(/#\/foco$/);
+    await expect(page.locator("[data-focus-id] h2")).toHaveText(["Paralela"]);
+    await expect(page.locator("#saved")).toHaveText("Guardado");
+    const data = await read(page);
+    validate(data);
+    expect(data.backlog).toHaveLength(1);
+    expect(data.backlog[0]).toMatchObject({
+      name: "Reglas",
+      projectId: "p",
+      estimate: "02:00",
+    });
+    if (existing) expect(data.backlog[0].id).toBe(backlogEntry.id);
+    const day = data.days["2026-10-26"];
+    expect(day.plan.blocks.find((b) => b.taskIds.includes(t.id))).toMatchObject(
+      { start: "09:00", end: "10:00", focusStates: { [t.id]: "finished" } },
+    );
+    expect(
+      day.plan.blocks.find((b) => b.taskIds.includes(parallel.id)),
+    ).toMatchObject({ start: "09:00", end: "11:00" });
+    expect(day.actual.blocks[0]).toMatchObject({
+      start: "09:00",
+      end: "10:00",
+    });
+    await page.reload();
+    await expect(page.locator("[data-focus-id] h2")).toHaveText(["Paralela"]);
+  });
+
+test("Foco envía una tarea abierta de ayer y registra ambos días; cancelar sigue sin registrar", async ({
+  page,
+}) => {
+  const plan = empty(),
+    t = { ...task([]), name: "Nocturna" };
+  plan.tasks = [t];
+  plan.blocks = [
+    { ...block(), taskIds: [t.id], start: "23:00", end: "", openStarted: true },
+  ];
+  await seed(page, {
+    version: 2,
+    tasks: [],
+    days: { "2026-10-25": { plan, actual: null } },
+  });
+  await page.goto("/#/foco");
+  await page.getByLabel("Opciones de Nocturna", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Enviar al backlog", exact: true })
+    .click();
+  await expect(page.locator("#saved")).toHaveText("Guardado");
+  const data = await read(page);
+  validate(data);
+  expect(data.days["2026-10-25"].actual.blocks[0]).toMatchObject({
+    start: "23:00",
+    end: "24:00",
+  });
+  expect(data.days["2026-10-26"].actual.blocks[0]).toMatchObject({
+    start: "00:00",
+    end: "10:00",
+  });
+  expect(data.backlog).toHaveLength(1);
+  await page.getByRole("button", { name: "Backlog", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Iniciar Nocturna", exact: true })
+    .click();
+  await page.clock.fastForward(10 * 60000);
+  await page.getByRole("button", { name: "Foco", exact: true }).click();
+  await page.getByLabel("Opciones de Nocturna", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Cancelar tarea", exact: true })
+    .click();
+  await expect(page.locator("#saved")).toHaveText("Guardado");
+  const cancelled = await read(page);
+  expect(cancelled.backlog).toHaveLength(1);
+  expect(cancelled.days["2026-10-26"].actual).toEqual(
+    data.days["2026-10-26"].actual,
+  );
+});

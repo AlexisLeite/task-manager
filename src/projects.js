@@ -15,7 +15,7 @@ const projectRow = (project) =>
   `<li data-project-id="${esc(project.id)}"><span class="project-title">${esc(project.name)}</span><button class="project-edit" aria-label="Editar ${esc(project.name)}" title="Editar título"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5"/></svg></button></li>`;
 
 export function projectsHtml(data) {
-  return `<section class="projects-view"><h1>Proyectos</h1><form id="project-add"><input id="project-name" aria-label="Nombre del proyecto" placeholder="Nombre del proyecto" autocomplete="off" required maxlength="120"><button type="submit">Agregar</button></form><ul id="project-list" aria-label="Mis proyectos">${(data.projects || []).map(projectRow).join("")}</ul><p id="projects-empty" class="empty" ${(data.projects || []).length ? "hidden" : ""}>Escribí un nombre y presioná Enter para agregar tu primer proyecto.</p></section>`;
+  return `<section class="projects-view" aria-label="Proyectos"><form id="project-add"><input id="project-name" aria-label="Nombre del proyecto" placeholder="Nombre del proyecto" autocomplete="off" required maxlength="120"><button type="submit">Agregar</button></form><ul id="project-list" aria-label="Mis proyectos">${(data.projects || []).map(projectRow).join("")}</ul><p id="projects-empty" class="empty" ${(data.projects || []).length ? "hidden" : ""}>Escribí un nombre y presioná Enter para agregar tu primer proyecto.</p></section>`;
 }
 
 export function bindProjects(data, checkpoint, save) {

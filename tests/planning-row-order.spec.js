@@ -34,7 +34,7 @@ for (const reducedMotion of ['reduce','no-preference']) {
     await expect.poll(()=>codes(page)).toEqual(['t6','t1','t3','t2','t4','t5']);
     await page.getByRole('button',{name:'+ Tarea',exact:true}).focus();
     await expect.poll(()=>codes(page)).toEqual(['t6','t1','t3','t2','t4','t5']);
-    await page.getByRole('button',{name:'Planificación',exact:true}).focus();
+    await page.getByRole('button',{name:'Jornada',exact:true}).focus();
     await expect.poll(()=>codes(page)).toEqual(['t6','t3','t2','t4','t1','t5']);
   });
 
@@ -49,7 +49,7 @@ for (const reducedMotion of ['reduce','no-preference']) {
       await expect.poll(()=>codes(page)).toEqual(expected);
       const index=removed==='t3'?2:0;
       await expect(page.getByLabel(`Tarea ${index+1}: Identificador`,{exact:true})).toBeFocused();
-      await page.getByRole('button',{name:'Planificación',exact:true}).focus();
+      await page.getByRole('button',{name:'Jornada',exact:true}).focus();
       await expect.poll(()=>codes(page)).toEqual(['t6','t3','t2','t4','t1'].filter(code=>code!==removed));
     });
   }

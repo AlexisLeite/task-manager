@@ -89,7 +89,7 @@ test("Historia filtra resumen y gráficas y navega a las jornadas realizadas", a
   }));
   expect(widths.body).toBeLessThanOrEqual(widths.viewport);
   await page.locator('[data-date="2026-10-01"]').click();
-  await expect(page.locator("#plan")).toHaveClass("active");
+  await expect(page.getByRole("table", {name:"Tareas de la jornada"})).toBeVisible();
   await expect(page.getByLabel("Fecha de jornada")).toHaveValue("2026-10-01");
 });
 
@@ -106,12 +106,9 @@ test("Posponer marca solo los campos Día y Hora y cierra con fondo o Escape", a
     if (!localStorage.getItem("jornada.v1"))
       localStorage.setItem("jornada.v1", JSON.stringify(data));
   }, data);
-  await page.goto("/#/foco");
+  await page.goto("/#/jornada");
   const open = async () => {
-    await page.locator("[data-focus-id] .focus-remaining summary").click();
-    await page
-      .getByRole("button", { name: "Posponer tarea", exact: true })
-      .click();
+    await page.getByRole('button',{name:'Posponer t1',exact:true}).click();
     await expect(page.locator("dialog[open]")).toBeVisible();
   };
   await open();

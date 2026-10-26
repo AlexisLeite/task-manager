@@ -29,7 +29,7 @@ const rowHtml = (
 </tr>`;
 
 export function backlogHtml(data) {
-  return `<section class="backlog-view"><h1>Backlog</h1><div class="grid-scroll"><table class="backlog-grid" aria-label="Tareas del backlog">
+  return `<section class="backlog-view" aria-label="Backlog"><div class="grid-scroll"><table class="backlog-grid" aria-label="Tareas del backlog">
     <colgroup><col><col class="project-col"><col class="estimate-col"><col class="backlog-actions-col"></colgroup><thead><tr><th>Tarea</th><th>Proyecto</th><th>Duración</th><th aria-label="Acciones"></th></tr></thead>
     <tbody id="backlog-list">${(data.backlog || []).map((t) => rowHtml(data, t)).join("")}</tbody></table></div>
     <button class="add" id="backlog-add">+ Tarea</button></section>`;
