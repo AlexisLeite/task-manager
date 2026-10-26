@@ -283,6 +283,13 @@ export function validate(data) {
     t.projectId === "" ||
     (typeof t.projectId === "string" && projectIds.has(t.projectId));
   if (!data.tasks.every(validProject)) throw Error("Proyecto inválido");
+  const backlog = data.backlog || [];
+  if (!Array.isArray(backlog) || backlog.some(t =>
+    !t || !['id','taskId','name','estimate'].every(k => typeof t[k] === 'string') ||
+    !t.id || !validProject(t) ||
+    (t.estimate !== '' && !Number.isFinite(minutes(t.estimate)))
+  ) || new Set(backlog.map(t => t.id)).size !== backlog.length)
+    throw Error("Backlog inválido");
   for (const [date, day] of Object.entries(data.days)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !day.plan)
       throw Error("Jornada inválida");

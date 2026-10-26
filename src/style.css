@@ -1152,7 +1152,7 @@ main {
 .stop-task[hidden] { display:none; }
 
 .day-grid .delete-col { width:104px; }
-.postpone-task { display:inline-flex; align-items:center; justify-content:center; padding:6px; border:0; background:transparent; color:var(--muted); }
+.postpone-task, .send-backlog { display:inline-flex; align-items:center; justify-content:center; padding:6px; border:0; background:transparent; color:var(--muted); }
 
 .day-grid tbody tr,
 .day-grid tbody tr :is(input, select, button, summary, .plan-status-icon, .priority-dot) {
@@ -1169,3 +1169,6 @@ main {
   .day-grid tbody tr,
   .day-grid tbody tr :is(input, select, button, summary, .plan-status-icon, .priority-dot) { transition:none; }
 }
+
+/* Backlog adds one action alongside Play, finish, postpone and delete. */
+.day-grid .delete-col { width: 136px; }

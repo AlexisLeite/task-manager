@@ -96,3 +96,33 @@ test("una sesión revocada vuelve a pedir acceso y conserva la pantalla al reing
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page.getByRole("textbox", { name: "Nombre del proyecto" })).toBeVisible();
 });
+
+test('backlog persiste en SQLite, inicia en Jornada y desaparece al completar', async ({ page }) => {
+  await page.clock.install({time:new Date('2026-10-26T10:00:00')});
+  await page.clock.pauseAt(new Date('2026-10-26T10:00:00'));
+  expect((await page.request.post('/api/login',{data:{username:'alexis',password:'alexis123'}})).ok()).toBeTruthy();
+  const loaded = await page.request.get('/api/workspace');
+  expect((await page.request.put('/api/workspace',{headers:{'If-Match':loaded.headers().etag},
+    data:{version:2,tasks:[],days:{},projects:[{id:'p',name:'POC'}]}})).ok()).toBeTruthy();
+  await page.goto('/#/backlog');
+  await page.getByRole('button',{name:'+ Tarea',exact:true}).click();
+  await page.getByLabel('Descripción de tarea',{exact:true}).fill('Pendiente SQLite');
+  await page.getByLabel('Proyecto de tarea',{exact:true}).selectOption('p');
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  await page.reload();
+  await expect(page.getByLabel('Descripción de tarea',{exact:true})).toHaveValue('Pendiente SQLite');
+  await page.getByRole('button',{name:'Iniciar Pendiente SQLite',exact:true}).click();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  await page.reload();
+  await expect(page.getByRole('button',{name:'Terminar t1',exact:true})).toBeVisible();
+  await page.clock.fastForward(15*60000);
+  await page.getByRole('button',{name:'Terminar t1',exact:true}).click();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  const persisted = await (await page.request.get('/api/workspace')).json();
+  expect(persisted.backlog).toHaveLength(0);
+  expect(persisted.days['2026-10-26'].actual.blocks[0]).toMatchObject({start:'10:00',end:'10:15'});
+  expect(persisted.days['2026-10-26'].actual.tasks[0].projectId).toBe('p');
+  await page.reload();
+  await page.getByRole('button',{name:'Backlog',exact:true}).click();
+  await expect(page.locator('#backlog-list tr')).toHaveCount(0);
+});

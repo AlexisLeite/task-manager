@@ -1,0 +1,59 @@
+.backlog-view {
+  max-width: 1050px;
+}
+.backlog-grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.backlog-grid th {
+  color: var(--muted);
+  font-weight: 400;
+  text-align: left;
+  font-size: 12px;
+  padding: 10px 8px;
+}
+.backlog-grid td {
+  padding: 8px 4px;
+  border-top: 1px solid var(--line);
+}
+.backlog-grid tr:last-child td {
+  border-bottom: 1px solid var(--line);
+}
+.backlog-grid input,
+.backlog-grid select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  padding: 10px 5px;
+}
+.backlog-grid .hours input {
+  text-align: center;
+}
+.backlog-grid .estimate-col {
+  width: 120px;
+}
+.backlog-grid .backlog-actions-col {
+  width: 76px;
+}
+.backlog-grid .task-row-actions button {
+  display: inline-flex;
+  padding: 6px;
+}
+.backlog-grid [data-backlog-play] {
+  color: #32a852;
+}
+.backlog-grid [data-backlog-remove]:hover {
+  color: var(--danger);
+}
+.backlog-grid tr.selected {
+  background: var(--selected);
+}
+@media (max-width: 650px) {
+  .backlog-grid {
+    min-width: 570px;
+  }
+}
