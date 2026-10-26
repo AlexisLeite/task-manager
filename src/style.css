@@ -7,6 +7,7 @@
   --text: #252b29;
   --muted: #69716c;
   --line: #e1e4df;
+  --integrity-line: #c6d8c8;
   --hover: #eef0eb;
   --selected: #dcebdc;
   --accent: #32623c;
@@ -22,6 +23,7 @@
   --text: #e2e5e1;
   --muted: #a0a7a1;
   --line: #353a3d;
+  --integrity-line: #3b5143;
   --hover: #292f31;
   --selected: #304337;
   --accent: #a5ce9d;
@@ -267,6 +269,16 @@ td {
   padding: 4px;
   border-bottom: 1px solid var(--line);
   height: 46px;
+}
+.day-grid tbody td {
+  border-top: 1px solid var(--line);
+  transition: border-top-color 160ms ease, border-top-width 160ms ease;
+}
+.day-grid .time-break-before td {
+  border-top: 2px solid var(--integrity-line);
+}
+@media (prefers-reduced-motion: reduce) {
+  .day-grid tbody td { transition: none; }
 }
 td input {
   width: 100%;
@@ -1168,3 +1180,19 @@ main {
 
 /* Backlog adds one action alongside Play, finish, postpone and delete. */
 .day-grid .delete-col { width: 136px; }
+
+.day-grid .actions-header { text-align: right; padding-top: 0; padding-bottom: 0; }
+.verify-integrity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  transition: color 160ms ease;
+}
+.verify-integrity[aria-pressed="true"] { color: #32a852; }
+@media (prefers-reduced-motion: reduce) {
+  .verify-integrity { transition: none; }
+}

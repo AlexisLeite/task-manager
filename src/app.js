@@ -89,6 +89,9 @@ const viewRoutes = {
 };
 let historyFilters = { from: "", to: "" };
 const backlogFilters = {projectId:"*",query:""};
+let verifyIntegrity = false;
+try { verifyIntegrity = localStorage.getItem("jornada.verifyIntegrity") === "true"; } catch {}
+
 const routeView = () =>
   location.hash === "#/mes"
     ? "month"
@@ -533,6 +536,11 @@ function updateView() {
     const grid = tr.closest("table").dataset.table,
       r = rows(grid)[+tr.dataset.index],
       error = errorFor(grid, r);
+    const index = +tr.dataset.index;
+    const previous = grid === "tasks" && index > 0 ? taskSchedule(rows(grid)[index - 1]) : null;
+    const current = grid === "tasks" ? taskSchedule(r) : null;
+    tr.classList.toggle("time-break-before", !!(verifyIntegrity && previous && current && previous !== current &&
+      clock(previous.end) && clock(current.start) && endMinute(previous) !== minutes(current.start)));
     tr.classList.toggle("invalid", !!error);
     tr.title = error;
     const statusCell = tr.querySelector(".plan-status");
@@ -960,7 +968,7 @@ function changeTaskStatus(t, state) {
   });
 }
 function gridHtml(grid) {
-  return `<div class="grid-scroll"><table data-table="tasks" class="day-grid" aria-label="Tareas de la jornada"><colgroup><col class="grip-col"><col class="status-col"><col class="code-col"><col><col class="time-col"><col class="time-col"><col class="estimate-col"><col class="project-col"><col class="delete-col"></colgroup><thead><tr>${['', 'Estado', 'Tarea', 'Descripción', 'Hora inicio', 'Hora fin', 'Duración', 'Proyecto', ''].map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${rows('tasks').map((t,i) => `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="tasks" data-index="${i}" aria-label="Seleccionar tarea ${i+1}">⠿</button></td><td class="plan-status">${taskStatusControl(t)}</td>${[0,3,5,6,1,4].map(c => {
+  return `<div class="grid-scroll"><table data-table="tasks" class="day-grid" aria-label="Tareas de la jornada"><colgroup><col class="grip-col"><col class="status-col"><col class="code-col"><col><col class="time-col"><col class="time-col"><col class="estimate-col"><col class="project-col"><col class="delete-col"></colgroup><thead><tr>${['', 'Estado', 'Tarea', 'Descripción', 'Hora inicio', 'Hora fin', 'Duración', 'Proyecto', ''].map((label,index) => `<th${index === 8 ? ' class="actions-header" aria-label="Acciones"' : ''}>${index === 8 ? `<button id="verify-integrity" class="verify-integrity" aria-label="Verificar integridad" title="Verificar integridad" aria-pressed="${verifyIntegrity}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>` : label}</th>`).join('')}</tr></thead><tbody>${rows('tasks').map((t,i) => `<tr data-index="${i}" aria-selected="false"><td><button class="handle" draggable="true" data-handle="tasks" data-index="${i}" aria-label="Seleccionar tarea ${i+1}">⠿</button></td><td class="plan-status">${taskStatusControl(t)}</td>${[0,3,5,6,1,4].map(c => {
     const field = fields.tasks[c];
     const attrs = `data-grid="tasks" data-row="${i}" data-col="${c}" aria-label="Tarea ${i+1}: ${labels.tasks[c]}"`;
     if(field === 'projectId') return `<td><select ${attrs}>${projectOptions(data,t.projectId)}</select></td>`;
@@ -1867,6 +1875,12 @@ function bind() {
   on("nav-history", () => navigate("month"));
   on("nav-projects", () => navigate("projects"));
   on("nav-backlog", () => navigate("backlog"));
+  on("verify-integrity", () => {
+    verifyIntegrity = !verifyIntegrity;
+    document.querySelector("#verify-integrity").setAttribute("aria-pressed", String(verifyIntegrity));
+    try { localStorage.setItem("jornada.verifyIntegrity", String(verifyIntegrity)); } catch {}
+    updateView();
+  });
   on("theme", toggleTheme);
   on("logout", async () => {
     const button = document.querySelector("#logout");
