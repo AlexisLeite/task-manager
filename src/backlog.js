@@ -1,4 +1,4 @@
-import {selectSource} from "./searchable-select.js";
+import { selectSource } from "./searchable-select.js";
 import { confirmTaskDeletion } from "./task-confirmation.js";
 import autoAnimate from "@formkit/auto-animate";
 import { task, parseTimeInput, normalize } from "./model.js";
@@ -62,6 +62,82 @@ export function backlogHtml(data, filters = { projectId: "*", query: "" }) {
     <button class="add" id="backlog-add">+ Tarea</button><p id="backlog-empty" class="empty" ${(data.backlog || []).some((t) => matchesFilters(data, t, filters)) || (!filters.query && filters.projectId === "*") ? "hidden" : ""}>No hay tareas que coincidan con los filtros.</p></section>`;
 }
 
+// A removed <tr> loses the table's column sizing when AutoAnimate makes it
+// absolute. Freeze its cells for the fade, then restore them for filtered rows
+// that may be inserted again. Surviving controls stay in their existing nodes.
+function backlogRowAnimation(element, action, previous, next) {
+  const timing = { duration: 200, easing: "ease-out" };
+  if (element.tagName === "TBODY" && action === "remain") {
+    // Keep the scroll viewport tall enough for rows that are still moving.
+    // Its height also moves the add button smoothly with the closing space.
+    const scroll = element.closest(".grid-scroll");
+    const height = element.closest("table").getBoundingClientRect().height;
+    return new KeyframeEffect(
+      scroll,
+      [
+        { height: `${height + previous.height - next.height}px` },
+        { height: `${height}px` },
+      ],
+      timing,
+    );
+  }
+  if (action === "remove") {
+    const cells = [...element.cells];
+    const widths = cells.map((cell) => cell.getBoundingClientRect().width);
+    const originalWidths = cells.map((cell) => cell.style.width);
+    cells.forEach((cell, i) => {
+      cell.style.width = `${widths[i]}px`;
+    });
+    const parent = element.parentElement.getBoundingClientRect();
+    const effect = new KeyframeEffect(
+      element,
+      [{ opacity: 1 }, { opacity: 0 }],
+      timing,
+    );
+    // AutoAnimate owns playback and removal; restore cell styles after it ends.
+    queueMicrotask(() => {
+      const animation = element
+        .getAnimations()
+        .find((animation) => animation.effect === effect);
+      animation?.addEventListener(
+        "finish",
+        () => {
+          cells.forEach((cell, i) => {
+            cell.style.width = originalWidths[i];
+          });
+        },
+        { once: true },
+      );
+    });
+    return [
+      effect,
+      {
+        styleReset: {
+          position: "absolute",
+          display: "table",
+          tableLayout: "fixed",
+          top: `${previous.top - parent.top - window.scrollY}px`,
+          left: `${previous.left - parent.left - window.scrollX}px`,
+          width: `${previous.width}px`,
+          height: `${previous.height}px`,
+          margin: "0",
+          pointerEvents: "none",
+        },
+      },
+    ];
+  }
+  return new KeyframeEffect(
+    element,
+    action === "add"
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [
+          { transform: `translateY(${previous.top - next.top}px)` },
+          { transform: "translateY(0)" },
+        ],
+    timing,
+  );
+}
+
 export function bindBacklog(
   data,
   checkpoint,
@@ -75,7 +151,12 @@ export function bindBacklog(
   if (!add) return;
   const list = document.querySelector("#backlog-list");
   const table = list.closest("table");
-  autoAnimate(list, { duration: 200 });
+  autoAnimate(
+    list,
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? { duration: 200 }
+      : backlogRowAnimation,
+  );
   let selected = new Set(),
     anchor = 0;
   const allEntries = () => (data.backlog ||= []);
@@ -384,12 +465,9 @@ export function bindBacklog(
       focus(i + (event.shiftKey ? -1 : 1), c);
       return;
     }
-    if (["Home", "End"].includes(key)) {
+    if (mod && ["Home", "End"].includes(key)) {
       event.preventDefault();
-      focus(
-        mod ? (key === "Home" ? 0 : entries().length - 1) : i,
-        key === "Home" ? 0 : 2,
-      );
+      focus(key === "Home" ? 0 : entries().length - 1, key === "Home" ? 0 : 2);
       return;
     }
     if (["ArrowUp", "ArrowDown"].includes(key)) {

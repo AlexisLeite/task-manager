@@ -2383,14 +2383,12 @@ function gridKey(e) {
     select(grid, i);
     return;
   }
-  if (["Home", "End"].includes(e.key) && !e.ctrlKey && !e.metaKey) {
+  if (["Home", "End"].includes(e.key) && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
-    const column = e.key === "Home" ? columnOrder(grid)[0] : columnOrder(grid).at(-1);
-    focusCell(grid, i, column);
-    const input = document.activeElement,
-      position = e.key === "Home" ? 0 : input.value.length;
-    if (input.setSelectionRange) input.setSelectionRange(position, position);
-    if (e.shiftKey) select(grid, i);
+    closeSuggestions();
+    const first = e.key === "Home";
+    focusCell(grid, first ? 0 : rows(grid).length - 1,
+      first ? columnOrder(grid)[0] : columnOrder(grid).at(-1));
     return;
   }
   if (e.altKey && ["ArrowUp", "ArrowDown"].includes(e.key)) {
