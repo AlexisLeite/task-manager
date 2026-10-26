@@ -540,7 +540,7 @@ function updateView() {
     const previous = grid === "tasks" && index > 0 ? taskSchedule(rows(grid)[index - 1]) : null;
     const current = grid === "tasks" ? taskSchedule(r) : null;
     tr.classList.toggle("time-break-before", !!(verifyIntegrity && previous && current && previous !== current &&
-      clock(previous.end) && clock(current.start) && endMinute(previous) !== minutes(current.start)));
+      clock(previous.end) && clock(current.start) && Math.abs(endMinute(previous) - minutes(current.start)) > 10));
     tr.classList.toggle("invalid", !!error);
     tr.title = error;
     const statusCell = tr.querySelector(".plan-status");

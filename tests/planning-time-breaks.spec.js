@@ -66,6 +66,18 @@ for (const [theme, reducedMotion] of [
       );
     }
     const input = page.getByLabel("Tarea 3: Hora inicio", { exact: true });
+    for (const [start, marked] of [
+      ["12:11", true],
+      ["12:10", false],
+      ["12:09", false],
+      ["11:50", false],
+      ["11:49", true],
+    ]) {
+      await input.fill(start);
+      await input.press("Tab");
+      if (marked) await expect(rows.nth(2)).toHaveClass(/time-break-before/);
+      else await expect(rows.nth(2)).not.toHaveClass(/time-break-before/);
+    }
     await input.fill("12:00");
     await input.press("Tab");
     await expect(rows.nth(2)).not.toHaveClass(/time-break-before/);
