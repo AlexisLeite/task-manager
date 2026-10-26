@@ -1,0 +1,163 @@
+.searchable-select {
+  display: inline-block;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  border-radius: 2px;
+}
+.searchable-select .combo-source {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0;
+  pointer-events: none;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.combo-root {
+  display: block;
+}
+.searchable-select .combo__control {
+  padding: 5px;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+}
+.searchable-select:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: var(--panel);
+}
+.searchable-select .combo__input {
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+  font: inherit;
+  color: inherit !important;
+}
+.combo__menu {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px;
+  box-shadow: 0 6px 20px var(--shadow);
+  font-size: 12px;
+  animation: combo-appear 140ms ease;
+}
+.combo__menu-list {
+  max-height: 250px;
+}
+.combo__option {
+  padding: 8px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.combo__option--is-focused {
+  background: var(--hover);
+}
+.combo__option--is-selected {
+  background: var(--selected);
+}
+.combo__option--is-disabled {
+  opacity: 0.4;
+}
+.combo__menu-notice {
+  padding: 8px;
+  color: var(--muted);
+}
+.combo-summary {
+  grid-area: 1/1/2/3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.backlog-grid .searchable-select .combo__control {
+  padding: 10px 5px;
+}
+.day-grid .searchable-select {
+  font-size: 12px;
+}
+.backlog-filters .searchable-select {
+  max-width: 260px;
+  border-bottom: 1px solid var(--line);
+}
+.backlog-filters .searchable-select .combo__control {
+  padding: 8px 5px;
+}
+.history-project-picker .searchable-select {
+  min-width: 180px;
+  max-width: 260px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+@keyframes combo-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combo__menu {
+    animation: none;
+  }
+}
+.priority-combo {
+  width: 24px;
+  min-width: 24px;
+  vertical-align: middle;
+}
+.priority-combo .combo__control {
+  padding: 4px;
+  min-height: 24px;
+}
+.priority-combo .combo__indicators {
+  display: none;
+}
+.priority-combo .combo__value-container {
+  overflow: hidden;
+}
+.priority-combo .combo__single-value {
+  display: flex;
+  align-items: center;
+}
+.combo__option .priority-dot {
+  display: inline-block;
+  margin-right: 8px;
+}
+.focus-priority .searchable-select {
+  width: 24px;
+}
+.searchable-select input.combo__input {
+  height: auto;
+  line-height: inherit;
+}
+.combo__menu {
+  min-width: 200px;
+  max-width: calc(100vw - 24px);
+}
+.status-combo {
+  width: 28px;
+  min-width: 28px;
+  vertical-align: middle;
+}
+.status-combo .combo__control {
+  padding: 6px;
+}
+.status-combo .combo__indicators {
+  display: none;
+}
+.status-combo .combo__single-value {
+  display: flex;
+  align-items: center;
+}

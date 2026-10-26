@@ -1,3 +1,4 @@
+import { chooseValue, expectValue } from "./helpers/combo.js";
 import { test, expect } from "@playwright/test";
 import {
   document as empty,
@@ -49,9 +50,11 @@ for (const reducedMotion of ["reduce", "no-preference"]) {
     await first
       .getByLabel("Descripción de tarea", { exact: true })
       .fill("Reglas");
-    await first
-      .getByLabel("Proyecto de tarea", { exact: true })
-      .selectOption("p");
+    await chooseValue(
+      page,
+      first.getByRole("combobox", { name: "Proyecto de tarea", exact: true }),
+      "p",
+    );
     await first.getByLabel("Duración de tarea", { exact: true }).fill("00:45");
     await page.getByRole("button", { name: "+ Tarea", exact: true }).click();
     await page
@@ -247,7 +250,7 @@ test("Completar una tarea programada desde Jornada retira solo su entrada del ba
   await page.goto("/#/jornada");
   await page.getByLabel("Fecha de jornada").fill("2026-10-25");
   await page
-    .getByRole("button", { name: "Cambiar estado de t1", exact: true })
+    .getByRole("combobox", { name: "Cambiar estado de t1", exact: true })
     .click();
   await page.getByRole("option", { name: "Completada", exact: true }).click();
   await expect(page.locator("#saved")).toHaveText("Guardado");
@@ -279,12 +282,27 @@ test("Grilla de tres columnas: teclado, selección, pegar, reordenar, retirar y 
   ).toBeDisabled();
   await cells().nth(0).fill("Primera");
   await cells().nth(0).press("Control+Shift+ArrowRight");
-  await expect(cells().nth(1)).toBeFocused();
+  await expect(
+    page
+      .getByRole("combobox", { name: "Proyecto de tarea", exact: true })
+      .first(),
+  ).toBeFocused();
   await cells().nth(1).press("Enter");
-  await page.getByRole("combobox", { name: "Filtrar opciones" }).fill("POC");
-  await page.getByRole("combobox", { name: "Filtrar opciones" }).press("Enter");
-  await expect(cells().nth(1)).toBeFocused();
-  await expect(cells().nth(1)).toHaveValue("p");
+  await page
+    .getByRole("combobox", { name: "Proyecto de tarea", exact: true })
+    .first()
+    .fill("POC");
+  await expect(page.getByRole('option',{name:'POC',exact:true})).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Proyecto de tarea", exact: true })
+    .first()
+    .press("Enter");
+  await expect(
+    page
+      .getByRole("combobox", { name: "Proyecto de tarea", exact: true })
+      .first(),
+  ).toBeFocused();
+  await expectValue(cells().nth(1), "p");
   await cells().nth(1).press("ArrowRight");
   await expect(cells().nth(2)).toBeFocused();
   await cells().nth(2).fill("130");
@@ -327,7 +345,7 @@ test("Grilla de tres columnas: teclado, selección, pegar, reordenar, retirar y 
   );
   await cells().nth(3).press("Control+v");
   await expect(cells().nth(3)).toHaveValue("Pegada");
-  await expect(cells().nth(4)).toHaveValue("p");
+  await expectValue(cells().nth(4), "p");
   await expect(cells().nth(5)).toHaveValue("00:20");
   await expect(cells().nth(6)).toHaveValue("Otra");
   await expect(cells().nth(3)).toBeFocused();

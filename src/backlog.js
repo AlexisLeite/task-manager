@@ -1,3 +1,4 @@
+import {selectSource} from "./searchable-select.js";
 import { confirmTaskDeletion } from "./task-confirmation.js";
 import autoAnimate from "@formkit/auto-animate";
 import { task, parseTimeInput, normalize } from "./model.js";
@@ -28,14 +29,48 @@ const rowHtml = (
 </div></td>
 </tr>`;
 
-export function backlogHtml(data) {
-  return `<section class="backlog-view" aria-label="Backlog"><div class="grid-scroll"><table class="backlog-grid" aria-label="Tareas del backlog">
+const searchText = (value) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .trim();
+const matchesFilters = (data, entry, filters) => {
+  if (
+    filters.projectId !== "*" &&
+    (entry.projectId || "") !== filters.projectId
+  )
+    return false;
+  const text = searchText(
+    `${entry.name} ${data.projects?.find((p) => p.id === entry.projectId)?.name || "Sin proyecto"}`,
+  );
+  return searchText(filters.query)
+    .split(/\s+/)
+    .every((word) => text.includes(word));
+};
+
+export function backlogHtml(data, filters = { projectId: "*", query: "" }) {
+  return `<section class="backlog-view" aria-label="Backlog"><div class="backlog-filters">
+    <input type="search" id="backlog-search" aria-label="Buscar en backlog" placeholder="Buscar tareas…" value="${esc(filters.query)}" autocomplete="off">
+    <select id="backlog-project-filter" aria-label="Filtrar backlog por proyecto"><option value="*" ${filters.projectId === "*" ? "selected" : ""}>Todos los proyectos</option>${projectOptions(data, filters.projectId)}</select>
+    <button id="backlog-clear-filters" ${filters.query || filters.projectId !== "*" ? "" : "hidden"}>Limpiar filtros</button></div><div class="grid-scroll"><table class="backlog-grid" aria-label="Tareas del backlog">
     <colgroup><col><col class="project-col"><col class="estimate-col"><col class="backlog-actions-col"></colgroup><thead><tr><th>Tarea</th><th>Proyecto</th><th>Duración</th><th aria-label="Acciones"></th></tr></thead>
-    <tbody id="backlog-list">${(data.backlog || []).map((t) => rowHtml(data, t)).join("")}</tbody></table></div>
-    <button class="add" id="backlog-add">+ Tarea</button></section>`;
+    <tbody id="backlog-list">${(data.backlog || [])
+      .filter((t) => matchesFilters(data, t, filters))
+      .map((t) => rowHtml(data, t))
+      .join("")}</tbody></table></div>
+    <button class="add" id="backlog-add">+ Tarea</button><p id="backlog-empty" class="empty" ${(data.backlog || []).some((t) => matchesFilters(data, t, filters)) || (!filters.query && filters.projectId === "*") ? "hidden" : ""}>No hay tareas que coincidan con los filtros.</p></section>`;
 }
 
-export function bindBacklog(data, checkpoint, save, start, undo, notice) {
+export function bindBacklog(
+  data,
+  checkpoint,
+  save,
+  start,
+  undo,
+  notice,
+  filters = { projectId: "*", query: "" },
+) {
   const add = document.querySelector("#backlog-add");
   if (!add) return;
   const list = document.querySelector("#backlog-list");
@@ -43,7 +78,25 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
   autoAnimate(list, { duration: 200 });
   let selected = new Set(),
     anchor = 0;
-  const entries = () => (data.backlog ||= []);
+  const allEntries = () => (data.backlog ||= []);
+  const visibleIds = new Set(
+    allEntries()
+      .filter((t) => matchesFilters(data, t, filters))
+      .map((t) => t.id),
+  );
+  const revealedIds = new Set();
+  const entries = () => allEntries().filter((t) => visibleIds.has(t.id));
+  const cachedRows = new Map(
+    [...list.children].map((row) => [row.dataset.backlogId, row]),
+  );
+  const rowFor = (entry) => {
+    if (!cachedRows.has(entry.id)) {
+      const template = document.createElement("template");
+      template.innerHTML = `<table><tbody>${rowHtml(data, entry)}</tbody></table>`;
+      cachedRows.set(entry.id, template.content.querySelector("tr"));
+    }
+    return cachedRows.get(entry.id);
+  };
   const rowNodes = () =>
     [...list.querySelectorAll("tr[data-backlog-id]")].filter((row) =>
       entries().some((entry) => entry.id === row.dataset.backlogId),
@@ -77,10 +130,70 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
       row.setAttribute("aria-selected", "false");
     });
   };
+  const syncEmpty = () => {
+    document.querySelector("#backlog-empty").hidden =
+      entries().length > 0 || (!filters.query && filters.projectId === "*");
+    document.querySelector("#backlog-clear-filters").hidden =
+      !filters.query && filters.projectId === "*";
+  };
+  const applyFilters = () => {
+    const next = allEntries().filter(
+      (t) => revealedIds.has(t.id) || matchesFilters(data, t, filters),
+    );
+    visibleIds.clear();
+    next.forEach((t) => visibleIds.add(t.id));
+    for (const row of [...list.querySelectorAll("tr[data-backlog-id]")])
+      if (!visibleIds.has(row.dataset.backlogId)) row.remove();
+    let following = null;
+    for (const entry of [...next].reverse()) {
+      const row = rowFor(entry);
+      if (row.parentElement !== list || row.nextElementSibling !== following)
+        list.insertBefore(row, following);
+      following = row;
+    }
+    selected = new Set([...selected].filter((id) => visibleIds.has(id)));
+    anchor = 0;
+    rowNodes().forEach((row) => {
+      row.classList.toggle("selected", selected.has(row.dataset.backlogId));
+      row.setAttribute(
+        "aria-selected",
+        String(selected.has(row.dataset.backlogId)),
+      );
+    });
+    syncEmpty();
+  };
+  const search = document.querySelector("#backlog-search");
+  const projectFilter = document.querySelector("#backlog-project-filter");
+  search.oninput = () => {
+    filters.query = search.value;
+    revealedIds.clear();
+    applyFilters();
+  };
+  projectFilter.onchange = () => {
+    filters.projectId = projectFilter.value;
+    revealedIds.clear();
+    applyFilters();
+  };
+  document.querySelector("#backlog-clear-filters").onclick = () => {
+    filters.query = "";
+    filters.projectId = "*";
+    search.value = "";
+    projectFilter.value = "*";
+    revealedIds.clear();
+    applyFilters();
+    search.focus();
+  };
+  autoAnimate(add.closest("section"), { duration: 200 });
   const append = () => {
-    const entry = task([]);
-    entries().push(entry);
-    list.insertAdjacentHTML("beforeend", rowHtml(data, entry));
+    const entry = {
+      ...task([]),
+      projectId: filters.projectId === "*" ? "" : filters.projectId,
+    };
+    allEntries().push(entry);
+    visibleIds.add(entry.id);
+    revealedIds.add(entry.id);
+    list.append(rowFor(entry));
+    syncEmpty();
     return entry;
   };
   const addRow = () => {
@@ -122,8 +235,14 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
     checkpoint();
     const first = entries().findIndex((t) => ids.has(t.id));
     const removed = rowNodes().filter((row) => ids.has(row.dataset.backlogId));
-    data.backlog = entries().filter((t) => !ids.has(t.id));
-    removed.forEach((row) => row.remove());
+    data.backlog = allEntries().filter((t) => !ids.has(t.id));
+    removed.forEach((row) => {
+      row.remove();
+      cachedRows.delete(row.dataset.backlogId);
+      visibleIds.delete(row.dataset.backlogId);
+      revealedIds.delete(row.dataset.backlogId);
+    });
+    syncEmpty();
     clear();
     if (entries().length) focus(Math.min(first, entries().length - 1));
     else add.focus();
@@ -169,6 +288,21 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
   list.addEventListener("focusout", (event) => {
     if (event.target.dataset.backlogField === "estimate") update(event.target);
   });
+  table.addEventListener("focusout", () =>
+    queueMicrotask(() => {
+      if (!table.isConnected) return;
+      const active = document.activeElement;
+      if (
+        table.contains(active) ||
+        active === add ||
+        active?.closest(".grid-options") ||
+        document.querySelector("dialog[open]")
+      )
+        return;
+      revealedIds.clear();
+      applyFilters();
+    }),
+  );
   list.addEventListener("click", (event) => {
     const row = event.target.closest("[data-backlog-id]");
     const entry = entries().find((t) => t.id === row?.dataset.backlogId);
@@ -181,7 +315,7 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
       select(entries().indexOf(entry), event.shiftKey);
   });
   table.addEventListener("keydown", (event) => {
-    const input = event.target,
+    const input = selectSource(event.target),
       field = input.dataset.backlogField;
     const row = input.closest("[data-backlog-id]");
     const i = entries().findIndex((t) => t.id === row?.dataset.backlogId),
@@ -266,8 +400,12 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
       );
       if (event.altKey && n !== i) {
         checkpoint();
-        const [entry] = entries().splice(i, 1);
-        entries().splice(n, 0, entry);
+        const reordered = entries();
+        [reordered[i], reordered[n]] = [reordered[n], reordered[i]];
+        let cursor = 0;
+        data.backlog = allEntries().map((entry) =>
+          visibleIds.has(entry.id) ? reordered[cursor++] : entry,
+        );
         const node = rowNodes()[i],
           target = rowNodes()[n];
         list.insertBefore(node, n < i ? target : target.nextSibling);
@@ -313,7 +451,7 @@ export function bindBacklog(data, checkpoint, save, start, undo, notice) {
       if (type === "cut") remove(selected);
     });
   table.addEventListener("paste", (event) => {
-    const input = event.target,
+    const input = selectSource(event.target),
       c = fields.indexOf(input.dataset.backlogField);
     const raw = event.clipboardData.getData("text/plain");
     if (c < 0 || !/[\t\n]/.test(raw)) return;

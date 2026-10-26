@@ -29,9 +29,13 @@ La contraseña se guarda con scrypt y sal aleatoria. La sesión dura siete días
 
 Backlog reúne tareas pendientes sin asignarles una fecha. Cada tarea tiene descripción, proyecto opcional y duración opcional, editables en una grilla de tres columnas: Tarea, Proyecto y Duración. **+ Tarea** o Ctrl+Enter agrega una fila. Flechas, Tab, Inicio/Fin y Enter permiten navegar; Alt+↑/↓ mueve filas, Shift+Espacio selecciona una fila y Shift+↑/↓ extiende la selección. Se pueden copiar, cortar y pegar filas tabuladas y deshacer con Ctrl+Z. Play crea una instancia en Jornada de hoy con inicio a la hora actual; sin duración queda abierta. Repetir Play vuelve a la ejecución existente. La tarea permanece en Backlog hasta completarla desde Jornada o Foco. Pausar el reloj no la retira.
 
+El buscador de Backlog combina palabras de la descripción y del nombre del proyecto sin distinguir mayúsculas ni tildes. Se puede combinar con el filtro de proyecto, incluida la opción Sin proyecto, y limpiar ambos filtros. La navegación, selección, eliminación y pegado operan sobre las filas visibles sin modificar las tareas ocultas. Las tareas nuevas toman el proyecto filtrado y permanecen visibles mientras se editan.
+
 Desde Jornada, **Enviar al backlog** retira la planificación pendiente. Si la tarea está en ejecución, cierra y registra su tramo antes de enviarla; si ya terminó, conserva su historial y la agrega como pendiente. Las tareas paralelas continúan sin cambios. La papelera de Backlog usa la misma confirmación de Jornada, con foco en Eliminar. Eliminar un elemento de Backlog no elimina trabajo registrado ni detiene una instancia en curso. El backlog se guarda y exporta junto con las jornadas.
 
 ## Documento y planificación
+
+Los combos de proyectos, prioridad y estado usan `react-select`, al igual que los filtros de Backlog y la selección múltiple de Historia. Permiten escribir para buscar sin distinguir tildes ni mayúsculas y mantienen los colores y tamaños de la aplicación. En la grilla, Enter abre el selector y las flechas continúan navegando entre filas y columnas cuando está cerrado.
 
 - Cada tarea tiene un identificador local (`t1`, `t2`...), duración `hh:mm`, prioridad **Baja / Media / Alta** y descripción. Al salir del campo, `2` se convierte en `02:00` y `230` en `02:30`. Letras y minutos inválidos no se aceptan.
 - **Todas** las tareas pendientes aparecen automáticamente en el plan. No hay que crearlas otra vez. Sus identidades se conservan cuando se reordenan o se cambia su código.
@@ -146,6 +150,8 @@ El menú de cada tarea ofrece Ver definición, seguido de las acciones según su
 
 
 ## Proyectos
+
+La lista se muestra en orden alfabético al abrir, agregar y renombrar proyectos.
 
 En Proyectos, escribir un nombre y presionar Enter permite agregarlo sin formularios adicionales. La columna Proyecto, al extremo derecho de Tareas para hoy, asigna una pertenencia opcional a cada tarea. La asignación se conserva al posponer, copiar y registrar trabajo desde Foco. Los registros realizados conservan el proyecto con el que se registraron; cambiar la planificación no reclasifica horas anteriores.
 

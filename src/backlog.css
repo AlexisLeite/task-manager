@@ -57,3 +57,29 @@
     min-width: 570px;
   }
 }
+
+.backlog-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+.backlog-filters input,
+.backlog-filters select {
+  min-width: 0;
+  padding: 8px 5px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+#backlog-search {
+  flex: 1;
+  min-width: 180px;
+}
+#backlog-project-filter {
+  max-width: 260px;
+}

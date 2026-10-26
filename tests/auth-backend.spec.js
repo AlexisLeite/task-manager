@@ -1,3 +1,4 @@
+import {chooseValue} from "./helpers/combo.js";
 import { test, expect } from "@playwright/test";
 import { document as empty, task, block } from '../src/model.js';
 
@@ -107,7 +108,7 @@ test('backlog persiste en SQLite, inicia en Jornada y desaparece al completar', 
   await page.goto('/#/backlog');
   await page.getByRole('button',{name:'+ Tarea',exact:true}).click();
   await page.getByLabel('Descripción de tarea',{exact:true}).fill('Pendiente SQLite');
-  await page.getByLabel('Proyecto de tarea',{exact:true}).selectOption('p');
+  await chooseValue(page,page.getByRole('combobox',{name:'Proyecto de tarea',exact:true}),'p');
   await expect(page.locator('#saved')).toHaveText('Guardado');
   await page.reload();
   await expect(page.getByLabel('Descripción de tarea',{exact:true})).toHaveValue('Pendiente SQLite');

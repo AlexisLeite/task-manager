@@ -1,3 +1,4 @@
+import {enhanceSelects, selectSource} from "./searchable-select.js";
 import {shiftAgenda,dateKey} from "./time-control.js";
 import {alphabetical} from "./option-order.js";
 import {syncRecordedProject} from './recorded-project.js';
@@ -87,6 +88,7 @@ const viewRoutes = {
   backlog: "backlog",
 };
 let historyFilters = { from: "", to: "" };
+const backlogFilters = {projectId:"*",query:""};
 const routeView = () =>
   location.hash === "#/mes"
     ? "month"
@@ -306,7 +308,7 @@ function focusCell(grid, i, c = 0) {
     ?.focus();
 }
 function activeCell() {
-  const el = document.activeElement;
+  const el = selectSource(document.activeElement);
   return el?.dataset.grid
     ? [el.dataset.grid, +el.dataset.row, +el.dataset.col]
     : null;
@@ -568,18 +570,8 @@ function updateView() {
       const t = doc().tasks[+el.dataset.row];
       if (!t) return;
       el.dataset.priorityValue = t.priority;
-      const dot = el.querySelector(".priority-dot");
-      dot.className = `priority-dot ${t.priority.toLowerCase()}`;
-      dot.setAttribute("aria-label", `${t.code}: ${t.priority}`);
-      dot.title = `${t.code}: ${t.priority}`;
-      el.closest("details")
-        .querySelectorAll("[data-plan-priority]")
-        .forEach((button) =>
-          button.setAttribute(
-            "aria-pressed",
-            button.dataset.planPriority === t.priority,
-          ),
-        );
+      el.value = t.priority;
+      el.dataset.priorityCode=t.code;
     });
   document
     .querySelectorAll('[data-grid="blocks"][data-col="3"]')
@@ -724,11 +716,8 @@ function priorityDots(b) {
     .map((t) => priorityControl(t))
     .join("");
 }
-function priorityControl(
-  t,
-  attrs = `aria-label="Prioridad de ${esc(t.code)}: ${esc(t.name)}"`,
-) {
-  return `<details class="focus-menu plan-priority" data-priority-id="${esc(t.id)}"><summary ${attrs} data-priority-value="${t.priority}"><span class="priority-dot ${t.priority.toLowerCase()}" role="img" aria-label="${esc(t.code)}: ${t.priority}" title="${esc(t.code)}: ${t.priority}"></span></summary><div popover="manual">${["Alta", "Baja", "Media"].map((p) => `<button data-plan-priority="${p}" data-task-id="${esc(t.id)}" aria-pressed="${p === t.priority}"><span class="priority-dot ${p.toLowerCase()}"></span> ${p}</button>`).join("")}</div></details>`;
+function priorityControl(t, attrs = `aria-label="Prioridad de ${esc(t.code)}: ${esc(t.name)}"`) {
+  return `<select data-priority-control data-priority-code="${esc(t.code)}" data-priority-value="${t.priority}" ${attrs}>${['Alta','Baja','Media'].map(value=>`<option value="${value}" ${t.priority===value?'selected':''}>${value}</option>`).join('')}</select>`;
 }
 const columnOrder = (grid) =>
   grid === "tasks" ? [2, 0, 3, 5, 6, 1, 4] : [0, 1, 2, 3];
@@ -936,7 +925,10 @@ function refreshGridStatus() {
     const icon = tr.querySelector('.plan-status-icon');
     const html = taskStatusIcon(t);
     // Replace only a changed icon; keep the status button and any edited cell focused.
-    if (icon && icon.dataset.status !== html.match(/data-status="([^"]+)"/)?.[1]) icon.outerHTML = html;
+    const statusSelect=tr.querySelector('select[data-task-status]');
+    if(statusSelect) {
+      if(statusSelect.dataset.statusIcon!==html) statusSelect.dataset.statusIcon=html;
+    } else if (icon && icon.dataset.status !== html.match(/data-status="([^"]+)"/)?.[1]) icon.outerHTML = html;
     const play = tr.querySelector('[data-start-task]');
     if (play) play.hidden = !canStartTask(t);
     const stop = tr.querySelector("[data-stop-task]");
@@ -952,7 +944,7 @@ function taskStatusControl(t) {
   const row = taskSchedule(t);
   const icon = taskStatusIcon(t);
   if (row?.focusStates?.[t.id] === 'finished') return icon;
-  return `<button class="status-trigger" data-task-status="${esc(t.id)}" aria-label="Cambiar estado de ${esc(t.code)}" aria-haspopup="listbox">${icon}</button>`;
+  return `<select data-status-icon="${esc(icon)}" data-task-status="${esc(t.id)}" aria-label="Cambiar estado de ${esc(t.code)}">${[['pending','Programada'],['finished','Completada'],['cancelled','Cancelada']].map(([value,label])=>`<option value="${value}" ${(row?.focusStates?.[t.id]||'pending')===value?'selected':''}>${label}</option>`).join('')}</select>`;
 }
 function changeTaskStatus(t, state) {
   const {row,key} = sourceSchedule(data,date,taskSchedule(t));
@@ -1463,7 +1455,7 @@ function focusHtml() {
           ? ` focus-shared${shared[0] === entry ? " focus-shared-first" : ""}${shared.at(-1) === entry ? " focus-shared-last" : ""}`
           : "";
       return `<li data-entry-key="${esc(entry.task.id)}" data-focus-id="${esc(t.id)}" data-focus-drag draggable="true" tabindex="0" class="focus-card${groupClass}">
-      <div class="focus-title"><details class="focus-menu focus-priority"><summary aria-label="Prioridad de ${esc(t.name || t.code)}"><span class="priority-dot ${normalizePriority(t.priority).toLowerCase()}" aria-hidden="true"></span></summary><div>${["Alta", "Baja", "Media"].map((p) => `<button data-focus-priority="${p}" aria-pressed="${p === normalizePriority(t.priority)}"><span class="priority-dot ${p.toLowerCase()}" aria-hidden="true"></span> ${p}</button>`).join("")}</div></details><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${counter}${focusMenu(entry)}</div>${progress}
+      <div class="focus-title"><span class="focus-priority">${priorityControl(t,`data-focus-priority-select="${esc(t.id)}" aria-label="Prioridad de ${esc(t.name || t.code)}"`)}</span><h2>${esc(t.name || t.code)}</h2></div><div class="focus-remaining">${counter}${focusMenu(entry)}</div>${progress}
     </li>`;
     })
     .join("")}${upcoming
@@ -1538,6 +1530,9 @@ function refreshFocus() {
         el.querySelector(".focus-remaining").prepend(
           incomingTime.cloneNode(true),
         );
+      const prioritySelect=el.querySelector('[data-focus-priority-select]');
+      const incomingPriority=fresh.querySelector('[data-focus-priority-select]');
+      if(prioritySelect && incomingPriority) prioritySelect.value=incomingPriority.value;
       const currentProgress = el.querySelector(".focus-progress");
       const incomingProgress = fresh.querySelector(".focus-progress");
       if (currentProgress && !incomingProgress) currentProgress.remove();
@@ -1646,6 +1641,13 @@ function bindFocus() {
   };
   autoAnimate(node.querySelector(".focus-list"), { duration: 250 });
   refreshFocus();
+  node.onchange=event=>{
+    const select=event.target.closest('[data-focus-priority-select]');
+    if(!select)return;
+    const t=activeFocus().find(entry=>entry.task.id===select.dataset.focusPrioritySelect)?.task;
+    if(!t)return;
+    checkpoint();t.priority=normalizePriority(select.value);refreshFocus();save();
+  };
   node.onclick = (e) => {
     const summary = e.target.closest(".focus-menu > summary");
     if (summary)
@@ -1823,7 +1825,7 @@ function render(keepOrder = false, previousOrder = null) {
     }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button><span class="day-history-controls"><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></span></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button><span class="day-history-controls"><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></span></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data,backlogFilters) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
@@ -1833,7 +1835,7 @@ function render(keepOrder = false, previousOrder = null) {
 function bind() {
   bindFocus();
   bindProjects(data, checkpoint, save);
-  bindBacklog(data, checkpoint, save, startBacklogTask, undo, notice);
+  bindBacklog(data, checkpoint, save, startBacklogTask, undo, notice, backlogFilters);
   bindHistoryControls(historyFilters, data, (key) => {
     setSelectedDate(key);
     navigate("day");
@@ -1922,6 +1924,7 @@ function bind() {
       }),
   );
   bindGrids();
+  enhanceSelects();
   on("export", () => {
     const url = URL.createObjectURL(
         new Blob([JSON.stringify(canonicalWorkspace(data), null, 2)], { type: "application/json" }),
@@ -1987,6 +1990,12 @@ function bindGrids() {
       }),
       true,
     );
+    plan.onchange=event=>{
+      const source=event.target.closest('select[data-task-status]');
+      if(!source)return;
+      const t=doc().tasks.find(t=>t.id===source.dataset.taskStatus);
+      if(t)changeTaskStatus(t,source.value);
+    };
     plan.onclick = (event) => {
       const status = event.target.closest('[data-task-status]');
       if (status) {
@@ -2560,13 +2569,14 @@ for (const type of ["copy", "cut"])
   });
 document.addEventListener("paste", (e) => {
   if (view !== "day" || !doc()) return;
+  const target = selectSource(e.target);
   const raw = e.clipboardData.getData("application/x-jornada"),
     text = e.clipboardData.getData("text/plain");
   if (!raw && !text.includes("\t") && !text.includes("\n")) return;
-  if (e.target.id === "intro" || e.target.id === "title") return;
-  const grid = e.target.dataset.grid || selection.grid || lastGrid;
+  if (target.id === "intro" || target.id === "title") return;
+  const grid = target.dataset.grid || selection.grid || lastGrid;
   if (
-    !e.target.closest("table") &&
+    !target.closest("table") &&
     rows(grid).length &&
     !selection.indices.size
   )
@@ -2581,10 +2591,10 @@ document.addEventListener("paste", (e) => {
   const at =
     selection.indices.size && selection.grid === grid
       ? Math.min(...selection.indices)
-      : Number(e.target.dataset.row ?? rows(grid).length) +
-        (+e.target.dataset.col === columnOrder(grid).at(-1) &&
-        (e.target.tagName === "SELECT" || (e.target.value?.length &&
-        e.target.selectionStart === e.target.value.length))
+      : Number(target.dataset.row ?? rows(grid).length) +
+        (+target.dataset.col === columnOrder(grid).at(-1) &&
+        (target.tagName === "SELECT" || (target.value?.length &&
+        target.selectionStart === target.value.length))
           ? 1
           : 0);
   commit(() => {

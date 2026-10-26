@@ -1,6 +1,6 @@
 import autoAnimate from "@formkit/auto-animate";
 import { alignHistoryPixels } from './chart-pixels.js';
-import { historyMatches, historyHtml, projectFilterLabel } from "./history.js";
+import { historyMatches, historyHtml } from "./history.js";
 
 const transitions = new WeakMap();
 
@@ -91,8 +91,6 @@ export function bindHistoryControls(filters, data, openDay) {
     empty.hidden = template.content.querySelector(
       "#history-search-empty",
     ).hidden;
-    document.getElementById("history-project-selection").textContent =
-      projectFilterLabel(data, filters.projectIds);
     filterToggle.textContent =
       filters.from || filters.to || filters.projectIds?.length
         ? "Filtros •"
@@ -116,45 +114,17 @@ export function bindHistoryControls(filters, data, openDay) {
       filters[field] = event.target.value;
       refresh();
     };
-  const projectToggle = document.getElementById("history-project-toggle");
-  const projectPopover = document.getElementById("history-project-popover");
-  projectToggle.onclick = () => {
-    if (projectPopover.matches(":popover-open")) {
-      projectPopover.hidePopover();
-      return;
-    }
-    projectPopover.showPopover();
-    const rect = projectToggle.getBoundingClientRect();
-    projectPopover.style.left = `${Math.max(12, Math.min(rect.left, innerWidth - projectPopover.offsetWidth - 12))}px`;
-    projectPopover.style.top = `${Math.min(rect.bottom + 6, innerHeight - projectPopover.offsetHeight - 12)}px`;
-  };
-  projectPopover.ontoggle = () =>
-    projectToggle.setAttribute(
-      "aria-expanded",
-      String(projectPopover.matches(":popover-open")),
-    );
-  const projectChecks = [
-    ...document.querySelectorAll("[data-history-project]"),
-  ];
-  projectChecks.forEach(
-    (input) =>
-      (input.onchange = () => {
-        filters.projectIds = projectChecks
-          .filter((input) => input.checked)
-          .map((input) => input.value);
-        refresh();
-      }),
-  );
-  document.getElementById("history-project-all").onclick = () => {
-    filters.projectIds = [];
-    projectChecks.forEach((input) => (input.checked = false));
+  const projectSelect=document.getElementById('history-project-select');
+  projectSelect.onchange=()=>{
+    filters.projectIds=[...projectSelect.selectedOptions].map(option=>option.value);
     refresh();
   };
   document.getElementById("history-clear").onclick = () => {
     Object.assign(filters, { from: "", to: "", projectIds: [] });
     for (const field of ["from", "to"])
       document.getElementById(`history-${field}`).value = "";
-    projectChecks.forEach((input) => (input.checked = false));
+    for(const option of projectSelect.options) option.selected=false;
+    projectSelect.dispatchEvent(new Event("input",{bubbles:true}));
     refresh();
   };
   const applySearch = () => {
