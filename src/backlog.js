@@ -331,6 +331,11 @@ export function bindBacklog(
   };
   const confirmRemove = (ids) => {
     const picked = new Set(ids);
+    const tasks = entries().filter(t => picked.has(t.id));
+    if (tasks.length && tasks.every(t => !t.name.trim())) {
+      remove(picked);
+      return;
+    }
     confirmTaskDeletion({
       names: entries()
         .filter((t) => picked.has(t.id))

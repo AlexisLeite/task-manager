@@ -322,9 +322,16 @@ function clearSelection() {
     tr.classList.remove("selected");
     tr.setAttribute("aria-selected", "false");
   });
+  refreshSelectionTotal();
 }
-function select(grid, i, range = false) {
-  if (range && selection.grid === grid) {
+function select(grid, i, range = false, toggle = false) {
+  if (toggle) {
+    if (selection.grid !== grid) clearSelection();
+    selection.grid = grid;
+    if (selection.indices.has(i)) selection.indices.delete(i);
+    else selection.indices.add(i);
+    selection.anchor = i;
+  } else if (range && selection.grid === grid) {
     selection.indices = new Set(
       Array.from(
         { length: Math.abs(i - selection.anchor) + 1 },
@@ -341,6 +348,7 @@ function select(grid, i, range = false) {
       tr.classList.toggle("selected", selection.indices.has(n));
       tr.setAttribute("aria-selected", selection.indices.has(n));
     });
+  refreshSelectionTotal();
 }
 function commit(fn, focus, keepOrder = true) {
   const order = keepOrder ? {date,...planningOrder(doc())} : null;
@@ -422,6 +430,13 @@ function move(grid, from, to) {
 function confirmDeleteRows() {
   if (!selection.indices.size) return;
   const picked = {grid:selection.grid, indices:[...selection.indices]};
+  if (picked.grid === "tasks" && picked.indices.every(index => {
+    const t = rows("tasks")[index];
+    return t && !t.name.trim() && !taskValue(t, "start") && !taskValue(t, "end");
+  })) {
+    deleteRows();
+    return;
+  }
   confirmTaskDeletion({
     names:picked.indices.map(i=>rows(picked.grid)[i]?.name || rows(picked.grid)[i]?.code || ''),
     message:'Se quitará solamente la parte de esta jornada. Las horas realizadas se conservan.',
@@ -532,15 +547,19 @@ function updateView() {
       .map((t) => t.name)
       .join(" / ");
   deriveEnds(doc());
+  let coveredUntil = null;
   document.querySelectorAll("[data-table] tbody tr").forEach((tr) => {
     const grid = tr.closest("table").dataset.table,
       r = rows(grid)[+tr.dataset.index],
       error = errorFor(grid, r);
-    const index = +tr.dataset.index;
-    const previous = grid === "tasks" && index > 0 ? taskSchedule(rows(grid)[index - 1]) : null;
     const current = grid === "tasks" ? taskSchedule(r) : null;
-    tr.classList.toggle("time-break-before", !!(verifyIntegrity && previous && current && previous !== current &&
-      clock(previous.end) && clock(current.start) && Math.abs(endMinute(previous) - minutes(current.start)) > 10));
+    tr.classList.toggle("time-break-before", !!(verifyIntegrity && current &&
+      clock(current.start) && coveredUntil !== null && minutes(current.start) - coveredUntil > 10));
+    if (grid === "tasks") {
+      // A shorter overlapping task must not hide time covered by an earlier one.
+      coveredUntil = current && clock(current.start) && clock(current.end)
+        ? Math.max(coveredUntil ?? -Infinity, endMinute(current)) : null;
+    }
     tr.classList.toggle("invalid", !!error);
     tr.title = error;
     const statusCell = tr.querySelector(".plan-status");
@@ -606,7 +625,21 @@ function updateView() {
   document.querySelector("#undo").disabled = !history.length;
   document.querySelector("#redo").disabled = !future.length;
 }
+function refreshSelectionTotal() {
+  const label = document.querySelector("#selection-total");
+  if (!label) return;
+  const selected = selection.grid === "tasks" ? [...selection.indices] : [];
+  const sum = selected.reduce((total, index) => {
+    const t = doc()?.tasks[index];
+    const value = t ? minutes(taskValue(t, "estimate")) : NaN;
+    return total + (Number.isFinite(value) ? value : 0);
+  }, 0);
+  label.textContent = `Suma: ${format(sum)} hs`;
+  label.classList.toggle("has-selection", selected.length > 0);
+  label.setAttribute("aria-hidden", String(!selected.length));
+}
 function refreshWorkedTotal() {
+  refreshSelectionTotal();
   const total = document.querySelector('#total');
   if (!total) return;
   const active = activeFocus();
@@ -1833,7 +1866,7 @@ function render(keepOrder = false, previousOrder = null) {
     }
   }
   document.querySelector("#app").innerHTML =
-    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button><span class="day-history-controls"><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></span></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data,backlogFilters) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
+    `<header class="toolbar"><nav><button id="nav-focus" class="${view === "focus" ? "active" : ""}">Foco</button><button id="nav-day" class="${view === "day" ? "active" : ""}">Jornada</button><button id="nav-backlog" class="${view === "backlog" ? "active" : ""}">Backlog</button><button id="nav-history" class="${view === "month" ? "active" : ""}">Historia</button><button id="nav-projects" class="${view === "projects" ? "active" : ""}">Proyectos</button></nav><div class="dates" ${view !== "day" ? "hidden" : ""}><button id="prev" aria-label="Día anterior">←</button><input type="date" id="date" aria-label="Fecha de jornada" value="${date}"><button id="next" aria-label="Día siguiente">→</button><button id="today">Hoy</button><span class="day-history-controls"><button id="undo" aria-label="Deshacer" ${history.length ? "" : "disabled"}>↶</button><button id="redo" aria-label="Rehacer" ${future.length ? "" : "disabled"}>↷</button></span></div><div class="settings">${localMode ? "" : `<span class="session-user">${esc(username())}</span><button id="logout">Cerrar sesión</button>`}<span role="status" id="saved" hidden>${status}</span><button id="theme" aria-label="Activar tema ${isDark() ? "claro" : "oscuro"}">${isDark() ? "☀ Claro" : "☾ Oscuro"}</button><details class="file-menu"><summary aria-label="Copias de seguridad">⋯</summary><div><button id="export">Exportar copia</button><label class="import">Importar copia<input type="file" id="import" accept="application/json"></label></div></details><div class="app-clock"><button id="app-clock" aria-label="Control del tiempo"></button><button id="clock-toggle"></button></div></div></header><main>${view === "day" ? `${gridHtml("tasks")}<div class="document-footer"><span id="total"></span><span id="selection-total" class="selection-total" aria-live="polite" aria-hidden="true"></span>${!doc().tasks.length && !doc().blocks.length ? '<button id="example">Cargar ejemplo</button>' : ""}</div>` : view === "focus" ? `<section id="focus-content" aria-label="Actividades actuales">${focusHtml()}</section>` : view === "backlog" ? backlogHtml(data,backlogFilters) : view === "projects" ? projectsHtml(data) : historyHtml(data, historyFilters)}<p id="notice" role="status" aria-live="polite"></p></main>`;
   document.querySelector("main").classList.toggle("wide-day", view === "day");
   bind();
   if (view === "day" && doc()) updateView();
@@ -2215,6 +2248,20 @@ function bindGrids() {
   });
   const planTable = document.querySelector('[data-table="tasks"]');
   if (planTable) {
+    planTable.addEventListener("mousedown", event => {
+      const row = event.target.closest("tbody tr[data-index]");
+      if (!row || event.button !== 0 || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeSuggestions();
+      select("tasks", Number(row.dataset.index), false, true);
+    }, true);
+    planTable.addEventListener("click", event => {
+      if (event.target.closest("tbody tr[data-index]") && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }, true);
     const leavePlan = (event) => {
       if (
         isRendering ||

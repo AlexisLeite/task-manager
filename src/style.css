@@ -272,7 +272,7 @@ td {
 }
 .day-grid tbody td {
   border-top: 1px solid var(--line);
-  transition: border-top-color 160ms ease, border-top-width 160ms ease;
+  transition: border-top-color 160ms ease, border-top-width 160ms ease, background-color 160ms ease;
 }
 .day-grid .time-break-before td {
   border-top: 2px solid var(--integrity-line);
@@ -1195,4 +1195,16 @@ main {
 .verify-integrity[aria-pressed="true"] { color: #32a852; }
 @media (prefers-reduced-motion: reduce) {
   .verify-integrity { transition: none; }
+}
+
+.selection-total {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 160ms ease, opacity 160ms ease;
+}
+.selection-total.has-selection { max-width: 240px; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .selection-total { transition: none; }
 }

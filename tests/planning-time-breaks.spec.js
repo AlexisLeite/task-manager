@@ -56,9 +56,9 @@ for (const [theme, reducedMotion] of [
     await page.reload();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
-    for (const i of [0, 1, 4])
+    for (const i of [0, 1, 3, 4])
       await expect(rows.nth(i)).not.toHaveClass(/time-break-before/);
-    for (const i of [2, 3]) {
+    for (const i of [2]) {
       await expect(rows.nth(i)).toHaveClass(/time-break-before/);
       await expect(rows.nth(i).locator("td").first()).toHaveCSS(
         "border-top-width",
@@ -71,7 +71,7 @@ for (const [theme, reducedMotion] of [
       ["12:10", false],
       ["12:09", false],
       ["11:50", false],
-      ["11:49", true],
+      ["11:49", false],
     ]) {
       await input.fill(start);
       await input.press("Tab");
@@ -94,5 +94,72 @@ for (const [theme, reducedMotion] of [
     await page.reload();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator(".time-break-before")).toHaveCount(0);
+  });
+}
+
+for (const [name, intervals, expected] of [
+  [
+    "mismo fin",
+    [
+      ["10:00", "14:39"],
+      ["12:09", "14:39"],
+    ],
+    [],
+  ],
+  [
+    "tarea contenida",
+    [
+      ["15:45", "19:23"],
+      ["18:15", "19:05"],
+    ],
+    [],
+  ],
+  [
+    "cobertura de varias filas",
+    [
+      ["10:00", "15:00"],
+      ["11:00", "12:00"],
+      ["13:00", "14:00"],
+      ["15:10", "16:00"],
+      ["16:11", "17:00"],
+    ],
+    [4],
+  ],
+]) {
+  test(`no marca solapamientos: ${name}`, async ({ page }) => {
+    const plan = empty();
+    for (const [start, end] of intervals) {
+      const t = {
+        ...task(plan.tasks),
+        name: "Tarea",
+        estimate: time(minutes(end) - minutes(start)),
+      };
+      plan.tasks.push(t);
+      plan.blocks.push({ ...block(), taskIds: [t.id], start, end });
+    }
+    await page.addInitScript((plan) => {
+      localStorage.setItem(
+        "jornada.v1",
+        JSON.stringify({
+          version: 2,
+          tasks: [],
+          projects: [],
+          days: { "2026-10-26": { plan, actual: null } },
+        }),
+      );
+      localStorage.setItem("jornada.selectedDate", "2026-10-26");
+      localStorage.setItem("jornada.verifyIntegrity", "true");
+    }, plan);
+    await page.goto("/#/jornada");
+    await expect(page.locator(".day-grid tbody tr")).toHaveCount(
+      intervals.length,
+    );
+    await expect
+      .poll(() =>
+        page
+          .locator(".time-break-before")
+          .evaluateAll((rows) => rows.map((row) => Number(row.dataset.index))),
+      )
+      .toEqual(expected);
   });
 }
