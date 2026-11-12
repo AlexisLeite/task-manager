@@ -445,7 +445,7 @@ function confirmDeleteRows() {
   }
   confirmTaskDeletion({
     names:picked.indices.map(i=>rows(picked.grid)[i]?.name || rows(picked.grid)[i]?.code || ''),
-    message:'Se quitará solamente la parte de esta jornada. Las horas realizadas se conservan.',
+    message:'Se eliminarán las tareas seleccionadas y sus horas registradas en esta jornada. Los registros de otros días se conservan. Podés deshacer esta acción.',
     onConfirm:()=>{
       selection.grid = picked.grid;
       selection.indices = new Set(picked.indices);

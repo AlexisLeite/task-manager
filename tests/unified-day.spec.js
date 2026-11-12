@@ -84,11 +84,11 @@ test('drag conserva el orden manual mientras se organiza y el proyecto se elige 
   await expect(name(1)).toBeFocused();
 });
 
-test('estado permite completar una cancelada del pasado y borrar sin perder horas registradas',async({page})=>{
+test('eliminar una completada quita sus horas de la jornada y deshacer las restaura',async({page})=>{
   await page.goto('/#/jornada');
   await page.getByLabel('Fecha de jornada').fill('2026-10-10');
   await page.getByRole('button',{name:'Cargar ejemplo',exact:true}).click();
-  const status=()=>page.getByRole('button',{name:'Cambiar estado de t1',exact:true});
+  const status=()=>page.getByRole('combobox',{name:'Cambiar estado de t1',exact:true});
   await status().click();
   await page.getByRole('option',{name:'Cancelada',exact:true}).click();
   await expect(page.getByRole('img',{name:'t1: Cancelada',exact:true})).toBeVisible();
@@ -111,10 +111,14 @@ test('estado permite completar una cancelada del pasado y borrar sin perder hora
   await page.locator('dialog[open]').getByRole('button',{name:'Eliminar',exact:true}).click();
   await expect(page.locator('tbody tr')).toHaveCount(4);
   await expect(page.locator('#saved')).toHaveText('Guardado');
-  expect(await actual()).toEqual(recorded);
+  expect((await actual()).blocks).toHaveLength(0);
+  expect((await actual()).tasks).toHaveLength(0);
+  await expect(page.locator('#total')).toHaveText('Trabajado: 0:00 hs');
   await page.keyboard.press('Control+z');
   await expect(page.locator('tbody tr')).toHaveCount(5);
   await expect(page.getByRole('img',{name:'t1: Terminada',exact:true})).toBeVisible();
+  await expect(page.locator('#saved')).toHaveText('Guardado');
+  expect(await actual()).toEqual(recorded);
   await expect(page.locator('#saved')).toHaveText('Guardado');
   await page.reload();
   await page.getByLabel('Fecha de jornada').fill('2026-10-10');

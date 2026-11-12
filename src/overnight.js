@@ -61,9 +61,16 @@ export function sourceSchedule(data, key, row) {
 }
 
 // Remove only the visible day's interval, keeping the surviving endpoint
-// and task identity. Actual work is deliberately untouched.
+// and task identity. Delete recorded work only for this day and these task IDs.
 export function removeDayPortions(workspace, key, ids) {
   const data = canonicalWorkspace(workspace);
+  const actual = data.days[key]?.actual;
+  if (actual) {
+    actual.tasks = actual.tasks.filter(task => !ids.has(task.id));
+    actual.blocks = actual.blocks
+      .map(row => ({...row, taskIds: row.taskIds.filter(id => !ids.has(id))}))
+      .filter(row => row.taskIds.length || row.refsText);
+  }
   for (const id of ids) {
     for (const [sourceDate, day] of Object.entries(data.days)) {
       const plan = day.plan;

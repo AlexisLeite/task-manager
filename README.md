@@ -67,6 +67,8 @@ Al reanudar el reloj global después de una pausa, se registra el tramo trabajad
 
 Jornada muestra únicamente **Planificación**. El trabajo realizado se consulta en **Historia** y se genera desde Foco o al marcar explícitamente una tarea como completada. Se conservan los registros históricos existentes; no se copia la planificación como trabajo realizado.
 
+Al eliminar una tarea desde Jornada se eliminan también sus horas registradas en la fecha seleccionada, por lo que dejan de sumar en Trabajado e Historia. La confirmación lo indica y Deshacer restaura tanto la tarea como sus horas. Los registros de otros días se conservan. Cortar y pegar sigue siendo un movimiento y conserva las horas registradas.
+
 Al escribir una descripción, aparecen tareas conocidas que ya tienen tiempo registrado en realizado. Las sugerencias se eligen con flechas y Enter o con clic. Reutilizan una identidad estable entre jornadas; una coincidencia de nombre también la reutiliza.
 
 **Historia** muestra tareas efectivamente realizadas y sus horas, jornadas trabajadas y filtros por rango de fechas. El tiempo de una tarea se calcula sin duplicar sus propios intervalos. Las horas de tareas diferentes en paralelo se muestran por separado, por lo que su suma puede superar el tiempo total de jornada.
